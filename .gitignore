@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets and local settings: never in git (copy .env.example to .env; on the server use environment variables)
+.env
+.secret_key
+
+# Documents live in the database now; an old local uploads folder is never committed
+uploads/
