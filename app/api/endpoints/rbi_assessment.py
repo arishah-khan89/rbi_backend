@@ -20,6 +20,7 @@ class Body(BaseModel):
     inputs: Dict[str, Any] = {}
     assessment_date: Optional[str] = None
     comments: Optional[str] = None
+    task_plan: Optional[Dict[str, Any]] = None                 # per side: {"action": "new" | "link" | "none", "task_id": ...}
 
 
 class ComponentBody(BaseModel):

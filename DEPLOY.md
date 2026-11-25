@@ -102,7 +102,7 @@ asks and counts only the side (external / internal) of the damage mechanisms ent
 the CUI questions are not asked when the vessel is not insulated; approval goes to one chosen Admin.
 
 One typing slip of the client's workbook is corrected on purpose (`CORRECTIONS` in `app/rbi_engine/rules_builder.py`: the toxic table
-`Score_Bands!A146` 5000 is used as 500, to be confirmed by the client). It stops by itself when the client fixes the cell, and it is always
+`Score_Bands!A146` 5000 is used as 500, confirmed by the client on 18 Nov 2026). It stops by itself when the client fixes the cell, and it is always
 listed under "known_issues".
 
 One setting of the client's Config sheet is also chosen on purpose (`SETTING_CHOICES` in the same file): `Config!B6` (normalise the external score of an

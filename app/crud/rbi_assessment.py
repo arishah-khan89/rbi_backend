@@ -24,6 +24,7 @@ from app.core import audit
 from app.core.config import settings
 from app.crud import notification as notifications
 from app.crud.approval import check_reviewer
+from app.crud import rbi_tasks
 from app.crud.cml import min_t_for_type
 from app.models.cml import InspectionReading, InspectionTML
 from app.models.equipment import Equipment
@@ -631,6 +632,8 @@ def _view(db: Session, a: RbiAssessment, live_inputs: Optional[Dict[str, Any]] =
             "created_by": a.created_by, "updated_by": a.updated_by,
             "finalized_by": a.finalized_by, "finalized_at": a.finalized_at.isoformat() if a.finalized_at else None,
             "assigned_reviewer": a.assigned_reviewer, "submit_comment": a.submit_comment,
+            "task_plan": rbi_tasks.describe(db, a.task_plan),
+            "task_options": rbi_tasks.options(db, eq, comp) if not locked else None,
             "approved_by": a.approved_by, "approved_at": a.approved_at.isoformat() if a.approved_at else None,
             "history": [_brief(x) for x in reversed(_by_component(db, [comp.id])[comp.id])]}
 
@@ -646,8 +649,10 @@ def new_assessment(db: Session, component_id, actor: str) -> dict:
     inputs = dict(rows[-1].inputs) if rows else suggested_inputs(db, eq, comp)
     inputs.pop("assessment_date", None)
     revision = (rows[-1].revision + 1) if rows else 1
+    before = (rows[-1].task_plan or {}) if rows else {}
+    plan = {key: {"action": "new" if (before.get(key) or {}).get("done") else "none"} for key in ("internal", "external")}     # the same task is updated
     a = RbiAssessment(component_id=comp.id, revision=revision, state="draft", assessment_date=date.today(), inputs=clean_inputs(db, load_rules(), inputs),
-                      created_by=actor, updated_by=actor)
+                      task_plan=plan, created_by=actor, updated_by=actor)
     db.add(a)
     db.flush()
     audit.record(db, actor, "rbi.assessment.create", str(a.id), f"{eq.equipment_id} | {comp.name} | revision {revision}")
@@ -688,6 +693,9 @@ def save_assessment(db: Session, assessment_id, body: Dict[str, Any], actor: str
     a.assessment_date = _when(body, a)
     if "comments" in body:
         a.comments = (body.get("comments") or "").strip() or None
+    if "task_plan" in body:
+        comp = _component(db, a.component_id)
+        a.task_plan = rbi_tasks.clean_plan(db, body.get("task_plan"), _equipment(db, comp.equipment_id), comp)
     a.updated_by = actor
     db.commit()
     return _view(db, a)
@@ -731,10 +739,12 @@ def finalize(db: Session, assessment_id, actor: str, approver: Optional[str] = N
     a.rules_version, a.state, a.return_reason = rules["version"], "finalized", None
     a.finalized_by, a.finalized_at, a.updated_by = actor, _now(), actor
     a.assigned_reviewer, a.submit_comment = (reviewer.username if reviewer else None), note
+    a.task_plan = rbi_tasks.clean_plan(db, a.task_plan, eq, comp)                           # what the admin sees and approves
     res = analysis["result"]
     audit.record(db, actor, "rbi.assessment.finalize", str(a.id),
                  f"{eq.equipment_id} | {comp.name} | revision {a.revision} | {res['risk']['level']} (POF {res['pof']['category']}, COF {res['cof']['category']})"
-                 + (f" -> {reviewer.username}" if reviewer else "") + (f" | {note}" if note else ""))
+                 + (f" -> {reviewer.username}" if reviewer else "") + (f" | {note}" if note else "")
+                 + f" | inspection tasks: {rbi_tasks.summary(a.task_plan)}")
     if reviewer:
         notifications.notify(db, reviewer.username, "risk_assigned", f"{actor} sent you {_what(eq, comp, a)} for approval", note, _Ref(a, eq), actor)
     db.commit()
@@ -776,7 +786,9 @@ def approve(db: Session, assessment_id, actor: str) -> dict:
         older.state = "superseded"
     a.state, a.approved_by, a.approved_at, a.updated_by = "approved", actor, _now(), actor
     audit.record(db, actor, "rbi.assessment.approve", str(a.id), f"{eq.equipment_id} | {comp.name} | revision {a.revision}")
-    notifications.notify(db, a.finalized_by, "risk_approved", f"{actor} approved {_what(eq, comp, a)}", None, _Ref(a, eq), actor)
+    made = rbi_tasks.reflect(db, a, comp, eq, actor)
+    notifications.notify(db, a.finalized_by, "risk_approved", f"{actor} approved {_what(eq, comp, a)}",
+                         ("Inspection tasks: " + "; ".join(made)) if made else None, _Ref(a, eq), actor)
     db.commit()
     return _view(db, a)
 

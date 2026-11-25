@@ -1,8 +1,10 @@
-"""Inspection tasks: planned inspection work per equipment. Everything is written by a person; nothing is calculated
-here except the badge ("overdue", "due soon", "ok") that says where the person's own next date stands."""
+"""Inspection tasks: planned inspection work per equipment. Everything is written by a person; the software works out only the
+badge ("overdue", "due soon", "ok") and one limit: when a task has an RBI interval and a last date, its next date cannot be later
+than the last date plus that interval (an earlier date is allowed)."""
 import math
 import uuid
 from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
 from sqlalchemy import case, func, or_
@@ -54,9 +56,22 @@ def _live_equipment(db: Session, equipment_id) -> Equipment:
     return equipment
 
 
-def _check(db: Session, equipment_id, name: str, last: Optional[date], nxt: Optional[date], own_id=None) -> None:
+def latest_next_date(last: Optional[date], years) -> Optional[date]:
+    """The latest date the next inspection may be on: the last date plus the RBI interval (365.25 days a year, as the risk assessment counts)."""
+    if last is None or years is None or Decimal(str(years)) <= 0:
+        return None
+    days = int((Decimal(str(years)) * Decimal("365.25")).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    return last + timedelta(days=days)
+
+
+def _check(db: Session, equipment_id, name: str, last: Optional[date], nxt: Optional[date], own_id=None,
+           interval=None, check_limit: bool = False) -> None:
     if last and nxt and nxt < last:
         raise ValueError("The next date cannot be before the last date.")
+    limit = latest_next_date(last, interval) if check_limit else None
+    if limit and nxt and nxt > limit:
+        raise ValueError(f"The next date cannot be later than the RBI date, {limit.isoformat()} (the last date plus the RBI interval of {Decimal(str(interval)).normalize():f} years). "
+                         "An earlier date is allowed.")
     taken = db.query(InspectionTask.id).filter(
         InspectionTask.equipment_id == equipment_id, func.lower(InspectionTask.name) == name.lower())
     if own_id is not None:
@@ -101,7 +116,7 @@ def get_task(db: Session, task_id) -> Optional[InspectionTask]:
 
 def create_task(db: Session, data: TaskCreate, actor: str = "System") -> InspectionTask:
     equipment = _live_equipment(db, data.equipment_id)
-    _check(db, equipment.id, data.name, data.last_date, data.next_date)
+    _check(db, equipment.id, data.name, data.last_date, data.next_date, interval=data.rbi_interval_years, check_limit=True)
     task = InspectionTask(equipment_id=equipment.id, created_by=actor, updated_by=actor,
                           **data.model_dump(exclude={"equipment_id"}))
     db.add(task)
@@ -123,8 +138,12 @@ def update_task(db: Session, task_id, data: TaskUpdate, actor: str = "System") -
     if "task_type" in sent and not sent["task_type"]:
         raise ValueError("Choose the type of the task.")
     changes = {f: (getattr(task, f), v) for f, v in sent.items() if f in FIELDS and not _same(getattr(task, f), v)}
-    merged = {f: sent.get(f, getattr(task, f)) for f in ("name", "last_date", "next_date")}
-    _check(db, task.equipment_id, merged["name"], merged["last_date"], merged["next_date"], own_id=task.id)
+    if task.source == "rbi" and "rbi_interval_years" in changes:
+        raise ValueError("The RBI interval of this task comes from the approved risk assessment. Assess the component again to change it.")
+    merged = {f: sent.get(f, getattr(task, f)) for f in ("name", "last_date", "next_date", "rbi_interval_years")}
+    # the RBI limit is checked when the dates or the interval are changed (a task saved earlier with a later date can still have its other fields edited)
+    _check(db, task.equipment_id, merged["name"], merged["last_date"], merged["next_date"], own_id=task.id,
+           interval=merged["rbi_interval_years"], check_limit=bool({"last_date", "next_date", "rbi_interval_years"} & set(changes)))
 
     for f in changes:
         setattr(task, f, sent[f])

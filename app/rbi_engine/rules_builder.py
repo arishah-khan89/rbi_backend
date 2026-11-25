@@ -33,7 +33,7 @@ CALC, MASTER, BANDS, CONFIG, FLUIDS, LIBRARY = "RBI_Calc", "Factor_Master", "Sco
 # (cell of Score_Bands, number in the workbook, number used, why)
 CORRECTIONS = [
     ("A146", 5000, 500, "the lower bounds of the toxic table are 0, 100, 200, 5000, 1000 (not ascending; the sheet's own text reads "
-                        "'5000 - <1000 ppm'): 5000 is taken as 500 (0, 100, 200, 500, 1000), a typing slip. To be confirmed by the client."),
+                        "'5000 - <1000 ppm'): 5000 is taken as 500 (0, 100, 200, 500, 1000), a typing slip. Confirmed by the client (WhatsApp, 18 Nov 2026)."),
 ]
 
 
@@ -310,7 +310,8 @@ def _read_factors(wf, wb) -> Tuple[List[dict], Dict[str, int], List[str]]:
             typed = calc[f"F{cr}"].value
             f["typed_score_in_sheet"] = _num(typed) if isinstance(typed, (int, float)) else None
             issues.append(f"{fid} 'Flammability': the sheet's score cell F{cr} holds the number {f['typed_score_in_sheet']} typed by hand, not a formula. "
-                          f"{MASTER} says the score is the fluid's flammability rating + 1, so the software works it out that way.")
+                          f"{MASTER}, RBI_Calc H{cr}, Score_Bands M01 and Algorithm step 3 say the score is the fluid's flammability rating (NFPA 0 to 4) + 1, "
+                          f"so the software works it out that way. The client said (WhatsApp, 18 Nov 2026) that the flammability readings of the list will be changed later.")
         elif kind == "flash":
             _expect(_formula(cf["D48"]), r"=VLOOKUP\(D49,'list of fluids'!B2:J117,9,0\)", f"{CALC}!D48")
             nested = re.sub(r"\s+", "", formula or "")

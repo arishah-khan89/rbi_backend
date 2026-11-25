@@ -113,3 +113,4 @@ class RbiAssessment(Base):
     approved_by = Column(String(200))
     assigned_reviewer = Column(String(80))                       # the admin it was sent to while it is finalized: only that admin decides
     submit_comment = Column(Text)                                # what the person wrote when sending it
+    task_plan = Column(JSONB)                                    # per side (internal / external): new task, link an existing task, or none; filled in by the approval

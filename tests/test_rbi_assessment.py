@@ -297,6 +297,145 @@ class Components(Base_):
         self.assertEqual(self.client.get(f"{API}/equipment", params={"sort": "bogus"}, headers=self.h("view")).status_code, 422)
 
 
+class RiskToInspectionTasks(Base_):
+    """The inspection plan of an approved risk assessment becomes inspection tasks, as the person chose for each side while it was a draft."""
+    TASKS = "/api/v1/inspection-tasks"
+    BOTH = {"internal": {"action": "new"}, "external": {"action": "new"}}
+
+    def approved(self, tag, plan, user="eng"):
+        eid, cid, d = self.completed_draft(tag, user)
+        if plan is not None:
+            put = self.client.put(f"{API}/assessments/{d['id']}", json={"inputs": d["inputs"], "task_plan": plan}, headers=self.h(user))
+            self.assertEqual(put.status_code, 200, put.text)
+        fin = self.client.post(f"{API}/assessments/{d['id']}/finalize", json={"approver": "adm"}, headers=self.h(user))
+        self.assertEqual(fin.status_code, 200, fin.text)
+        ok = self.client.post(f"{API}/assessments/{d['id']}/approve", headers=self.h("adm"))
+        self.assertEqual(ok.status_code, 200, ok.text)
+        return eid, cid, ok.json()
+
+    def tasks(self, eid):
+        r = self.client.get(self.TASKS, params={"equipment_id": eid}, headers=self.h("view"))
+        self.assertEqual(r.status_code, 200, r.text)
+        return {t["task_type"]: t for t in r.json()["data"]}
+
+    def manual_task(self, eid, task_type, name):
+        r = self.client.post(self.TASKS, json={"equipment_id": eid, "name": name, "task_type": task_type, "duration_days": 30,
+                                               "rbi_interval_years": 15, "last_date": "2024-12-15", "next_date": "2030-12-15"}, headers=self.h("eng"))
+        self.assertEqual(r.status_code, 201, r.text)
+        return r.json()
+
+    def test_a_new_task_for_each_side_is_made_when_approved(self):
+        eid, cid, a = self.approved("V-RT-1", self.BOTH)
+        planning = a["result"]["planning"]
+        tasks = self.tasks(eid)
+        self.assertEqual(sorted(tasks), ["External", "Internal"])
+        for kind, key in (("Internal", "internal"), ("External", "external")):
+            t = tasks[kind]
+            self.assertEqual(t["source"], "rbi")
+            self.assertEqual(float(t["rbi_interval_years"]), planning[f"{key}_interval_years"])
+            self.assertEqual((t["last_date"], t["next_date"]), (planning[key]["last"], planning[key]["due"]))
+            self.assertEqual(t["rbi_assessment_id"], a["id"])
+            self.assertIn("V-RT-1-SH", t["name"])
+            self.assertIn(a["result"]["risk"]["level"], t["details"])
+            self.assertEqual((a["task_plan"][key]["action"], a["task_plan"][key]["done"], a["task_plan"][key]["task_id"]), ("new", "created", t["id"]))
+
+    def test_nothing_is_added_unless_the_person_chose_it(self):
+        eid, cid, a = self.approved("V-RT-2", None)                               # nothing chosen
+        self.assertEqual((a["task_plan"]["internal"]["action"], a["task_plan"]["external"]["action"]), ("none", "none"))
+        self.assertEqual(self.tasks(eid), {})
+        eid, cid, a = self.approved("V-RT-2B", {"internal": {"action": "new"}, "external": {"action": "none"}})
+        self.assertEqual(sorted(self.tasks(eid)), ["Internal"])                   # one side only
+
+    def test_nothing_is_added_while_it_waits_or_when_it_is_returned(self):
+        eid, cid, d = self.completed_draft("V-RT-3")
+        self.client.put(f"{API}/assessments/{d['id']}", json={"inputs": d["inputs"], "task_plan": self.BOTH}, headers=self.h("eng"))
+        self.client.post(f"{API}/assessments/{d['id']}/finalize", json={"approver": "adm"}, headers=self.h("eng"))
+        self.assertEqual(self.tasks(eid), {})                                              # waiting for approval: nothing yet
+        self.client.post(f"{API}/assessments/{d['id']}/return", json={"reason": "check"}, headers=self.h("adm"))
+        self.assertEqual(self.tasks(eid), {})                                              # returned: nothing
+
+    def test_a_task_the_equipment_already_has_can_be_linked_instead_of_making_a_second_one(self):
+        eid, cid, d = self.completed_draft("V-RT-8")
+        mine = self.manual_task(eid, "Internal", "task1")
+        opts = self.client.get(f"{API}/assessments/{d['id']}", headers=self.h("eng")).json()["task_options"]
+        self.assertEqual([o["name"] for o in opts["internal"]], ["task1"])
+        self.assertEqual(opts["external"], [])
+        plan = {"internal": {"action": "link", "task_id": mine["id"]}, "external": {"action": "new"}}
+        self.assertEqual(self.client.put(f"{API}/assessments/{d['id']}", json={"inputs": d["inputs"], "task_plan": plan}, headers=self.h("eng")).status_code, 200)
+        self.client.post(f"{API}/assessments/{d['id']}/finalize", json={"approver": "adm"}, headers=self.h("eng"))
+        a = self.client.post(f"{API}/assessments/{d['id']}/approve", headers=self.h("adm")).json()
+        tasks = self.tasks(eid)
+        self.assertEqual(len(tasks), 2)                                                    # task1 (linked) and the new external one, not three
+        t = tasks["Internal"]
+        self.assertEqual((t["id"], t["name"], t["duration_days"], t["source"]), (mine["id"], "task1", 30, "rbi"))
+        self.assertEqual(float(t["rbi_interval_years"]), a["result"]["planning"]["internal_interval_years"])    # now from the assessment, not the typed 15
+        self.assertEqual(a["task_plan"]["internal"]["done"], "linked")
+        self.assertEqual(a["task_plan"]["internal"]["task_name"], "task1")
+
+    def test_a_link_to_a_wrong_task_is_refused(self):
+        eid, cid, d = self.completed_draft("V-RT-9")
+        other_eid = make_vessel("V-RT-9B")
+        theirs = self.manual_task(other_eid, "Internal", "theirs")
+        wrong_type = self.manual_task(eid, "External", "ext")
+        for entry in ({"action": "link", "task_id": theirs["id"]}, {"action": "link", "task_id": wrong_type["id"]}, {"action": "link"}, {"action": "maybe"}):
+            r = self.client.put(f"{API}/assessments/{d['id']}", json={"inputs": d["inputs"], "task_plan": {"internal": entry}}, headers=self.h("eng"))
+            self.assertEqual(r.status_code, 400, (entry, r.text))
+
+    def test_a_newer_revision_updates_the_same_tasks_and_keeps_what_the_person_wrote(self):
+        eid, cid, a1 = self.approved("V-RT-4", self.BOTH)
+        t = self.tasks(eid)["Internal"]
+        put = self.client.put(f"{self.TASKS}/{t['id']}", json={"duration_days": 30, "name": "Internal inspection of the shell"}, headers=self.h("eng"))
+        self.assertEqual(put.status_code, 200, put.text)
+        d2 = self.client.post(f"{API}/components/{cid}/assessments", headers=self.h("eng")).json()
+        self.assertEqual(d2["task_plan"]["internal"]["action"], "new")                    # the same task is updated, unless the person changes it
+        inputs = {**d2["inputs"], "internal_corrosion_rate": 0.2, "last_internal_inspection": "2025-06-01"}
+        self.assertEqual(self.client.put(f"{API}/assessments/{d2['id']}", json={"inputs": inputs}, headers=self.h("eng")).status_code, 200)
+        self.assertEqual(self.client.post(f"{API}/assessments/{d2['id']}/finalize", json={"approver": "adm"}, headers=self.h("eng")).status_code, 200)
+        a2 = self.client.post(f"{API}/assessments/{d2['id']}/approve", headers=self.h("adm")).json()
+        tasks = self.tasks(eid)
+        self.assertEqual(sorted(tasks), ["External", "Internal"])                         # still two, not four
+        self.assertEqual(tasks["Internal"]["id"], t["id"])
+        self.assertEqual((tasks["Internal"]["duration_days"], tasks["Internal"]["name"]), (30, "Internal inspection of the shell"))
+        self.assertEqual(tasks["Internal"]["rbi_assessment_id"], a2["id"])
+        self.assertEqual(tasks["Internal"]["next_date"], a2["result"]["planning"]["internal"]["due"])
+        self.assertEqual(a2["task_plan"]["internal"]["done"], "updated")
+
+    def test_a_newer_revision_keeps_the_persons_planned_next_date_while_it_fits_the_rbi_date(self):
+        from datetime import date, timedelta
+        eid, cid, a1 = self.approved("V-RT-10", self.BOTH)
+        t = self.tasks(eid)["Internal"]
+        planned = (date.fromisoformat(t["next_date"]) - timedelta(days=40)).isoformat()                # earlier than the RBI date, after the last date
+        self.assertEqual(self.client.put(f"{self.TASKS}/{t['id']}", json={"next_date": planned}, headers=self.h("eng")).status_code, 200)
+        d2 = self.client.post(f"{API}/components/{cid}/assessments", headers=self.h("eng")).json()   # same answers: the RBI date does not change
+        self.client.post(f"{API}/assessments/{d2['id']}/finalize", json={"approver": "adm"}, headers=self.h("eng"))
+        a2 = self.client.post(f"{API}/assessments/{d2['id']}/approve", headers=self.h("adm")).json()
+        after = self.tasks(eid)["Internal"]
+        self.assertEqual(after["next_date"], planned)                                                  # not overwritten by the RBI date
+        self.assertEqual(after["rbi_assessment_id"], a2["id"])
+        self.assertEqual(float(after["rbi_interval_years"]), a2["result"]["planning"]["internal_interval_years"])
+
+    def test_the_interval_of_an_rbi_task_cannot_be_typed_but_the_rest_can(self):
+        eid, cid, a = self.approved("V-RT-5", self.BOTH)
+        t = self.tasks(eid)["External"]
+        bad = self.client.put(f"{self.TASKS}/{t['id']}", json={"rbi_interval_years": 3}, headers=self.h("eng"))
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("comes from the approved risk assessment", bad.json()["detail"])
+        ok = self.client.put(f"{self.TASKS}/{t['id']}", json={"duration_days": 5, "last_date": "2026-01-10"}, headers=self.h("eng"))
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertEqual(ok.json()["duration_days"], 5)
+
+    def test_the_new_task_form_can_ask_what_the_approved_assessments_say(self):
+        eid, cid, a = self.approved("V-RT-6", None)
+        planning = a["result"]["planning"]
+        got = self.client.get(f"{self.TASKS}/rbi-suggestion", params={"equipment_id": eid, "task_type": "Internal"}, headers=self.h("eng")).json()
+        self.assertEqual(got["interval_years"], planning["internal_interval_years"])
+        self.assertEqual(got["next_date"], planning["internal"]["due"])
+        self.assertEqual(got["component"], "V-RT-6-SH")
+        self.assertIsNone(self.client.get(f"{self.TASKS}/rbi-suggestion", params={"equipment_id": eid, "task_type": "NDE"}, headers=self.h("eng")).json()["interval_years"])
+        other = make_vessel("V-RT-7")
+        self.assertIsNone(self.client.get(f"{self.TASKS}/rbi-suggestion", params={"equipment_id": other, "task_type": "Internal"}, headers=self.h("eng")).json()["interval_years"])
+
+
 class WhatTheSoftwareKnows(Base_):
     def test_a_new_assessment_starts_with_what_the_equipment_register_has(self):
         eid, cid, d = self.draft("V-K-1")

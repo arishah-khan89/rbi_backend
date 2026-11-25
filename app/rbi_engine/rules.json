@@ -2488,8 +2488,8 @@
   }
  },
  "known_issues": [
-  "C2.1 'Toxic mixture available': Score_Bands!A146 holds 5000; the software uses 500: the lower bounds of the toxic table are 0, 100, 200, 5000, 1000 (not ascending; the sheet's own text reads '5000 - <1000 ppm'): 5000 is taken as 500 (0, 100, 200, 500, 1000), a typing slip. To be confirmed by the client.",
-  "C2.7 'Flammability': the sheet's score cell F45 holds the number 5 typed by hand, not a formula. Factor_Master says the score is the fluid's flammability rating + 1, so the software works it out that way.",
+  "C2.1 'Toxic mixture available': Score_Bands!A146 holds 5000; the software uses 500: the lower bounds of the toxic table are 0, 100, 200, 5000, 1000 (not ascending; the sheet's own text reads '5000 - <1000 ppm'): 5000 is taken as 500 (0, 100, 200, 500, 1000), a typing slip. Confirmed by the client (WhatsApp, 18 Nov 2026).",
+  "C2.7 'Flammability': the sheet's score cell F45 holds the number 5 typed by hand, not a formula. Factor_Master, RBI_Calc H45, Score_Bands M01 and Algorithm step 3 say the score is the fluid's flammability rating (NFPA 0 to 4) + 1, so the software works it out that way. The client said (WhatsApp, 18 Nov 2026) that the flammability readings of the list will be changed later.",
   "P1.7 'Coating quality': RBI_Calc C66 holds the weight 5 typed by hand, but Factor_Master says 10. The software uses Factor_Master (the README says weights are changed there).",
   "P2.3 'Internal corrosion type': RBI_Calc C80 holds the weight 10 typed by hand, but Factor_Master says 8. The software uses Factor_Master (the README says weights are changed there).",
   "P2.4 'Corrosion-rate trend (ST vs LT)': the table range Score_Bands!A237:B242 starts on the heading row (237, 'Lower bound (≥)'). Excel skips it, so the software skips it too.",
@@ -2500,5 +2500,5 @@
   "Inspection priority: Config's table is headed 'POF category rows x COF category columns' (like the risk matrix), but the formula in RBI_Calc!D106 uses the COF category as the row and the POF category as the column. The software follows the formula (what the sheet computes); where POF and COF categories differ the two readings give different priorities.",
   "Test_Cases, Case 5: the sheet itself says FAIL (its 'expected' result is older than the current Config), so that case is compared with the sheet's own calculation, not with its expected values."
  ],
- "version": "08b51b2420c0"
+ "version": "68c35a81572f"
 }

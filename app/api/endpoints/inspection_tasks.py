@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import Principal, authorize
 from app.core.database import get_db
 from app.crud import inspection_task as crud
+from app.crud import rbi_tasks
 from app.models.audit import AuditLog
 from app.schemas.auth import AuditOut
 from app.schemas.inspection_task import TaskCreate, TaskListResponse, TaskResponse, TaskUpdate
@@ -29,6 +30,13 @@ def list_tasks(
     db: Session = Depends(get_db),
 ):
     return crud.list_tasks(db, equipment_id, task_type, status_filter, q, page, page_size)
+
+
+@router.get("/rbi-suggestion")
+def rbi_suggestion(equipment_id: uuid.UUID = Query(...), task_type: str = Query(...), db: Session = Depends(get_db)):
+    """The RBI interval (and last / next date) the approved risk assessments of this equipment give for an Internal / External task."""
+    found = rbi_tasks.suggestion(db, equipment_id, task_type)
+    return found or {"interval_years": None}
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

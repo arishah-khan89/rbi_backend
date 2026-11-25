@@ -124,6 +124,23 @@ class Tasks(unittest.TestCase):
         t = self.make(name="Inspection Task-2", task_type="External", rbi_interval_years=None, last_date=None, next_date=None)
         self.assertEqual((t["rbi_interval_years"], t["last_date"], t["next_date"], t["status"]), (None, None, None, "none"))
 
+    def test_the_next_date_cannot_be_later_than_the_last_date_plus_the_rbi_interval(self):
+        # 2 years = 730.5 days, counted as 731: the latest next date after 2025-01-01 is 2027-01-02
+        post = lambda **kw: self.client.post(API, headers=self.h["eng"], json=self.body(**kw))
+        late = post(name="late", rbi_interval_years=2, last_date="2025-01-01", next_date="2027-01-03")
+        self.assertEqual(late.status_code, 400)
+        self.assertIn("cannot be later than the RBI date, 2027-01-02", late.json()["detail"])
+        self.assertEqual(post(name="on the day", rbi_interval_years=2, last_date="2025-01-01", next_date="2027-01-02").status_code, 201)
+        self.assertEqual(post(name="earlier", rbi_interval_years=2, last_date="2025-01-01", next_date="2026-06-01").status_code, 201)
+        self.assertEqual(post(name="no interval", rbi_interval_years=None, last_date="2025-01-01", next_date="2040-01-01").status_code, 201)   # no interval: no limit
+        self.assertEqual(post(name="no last date", rbi_interval_years=2, last_date=None, next_date="2040-01-01").status_code, 201)
+        # changing the dates is checked; another field of an older task with a later date is not
+        t = self.client.post(API, headers=self.h["eng"], json=self.body(name="old", rbi_interval_years=None, last_date="2025-01-01", next_date="2040-01-01")).json()
+        self.assertEqual(self.client.put(f"{API}/{t['id']}", headers=self.h["eng"], json={"duration_days": 9}).status_code, 200)
+        self.assertEqual(self.client.put(f"{API}/{t['id']}", headers=self.h["eng"], json={"rbi_interval_years": 2}).status_code, 400)    # the later date no longer fits
+        ok = self.client.put(f"{API}/{t['id']}", headers=self.h["eng"], json={"rbi_interval_years": 2, "next_date": "2027-01-02"})
+        self.assertEqual(ok.status_code, 200, ok.text)
+
     def test_the_four_types_and_only_those(self):
         for i, kind in enumerate(("Internal", "External", "UTG", "NDE")):
             self.make(name=f"T-{i}", task_type=kind)

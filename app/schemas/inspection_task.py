@@ -67,6 +67,8 @@ class TaskResponse(BaseModel):
     last_date: Optional[date] = None
     next_date: Optional[date] = None
     status: str = "none"                  # overdue | due_soon | ok | none (no next date)
+    source: str = "manual"                # manual (written by a person) | rbi (made from an approved risk assessment)
+    rbi_assessment_id: Optional[uuid.UUID] = None
     created_at: Optional[datetime] = None
     created_by: Optional[str] = None
     updated_at: Optional[datetime] = None
