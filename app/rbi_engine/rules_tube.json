@@ -1,0 +1,2490 @@
+{
+ "model": "tube",
+ "source_file": "RBI Logics -Tube Bundles.xlsx",
+ "factors": [
+  {
+   "id": "C1.1",
+   "side": "COF",
+   "group": "C1",
+   "label": "Production loss – shutdown for repair / replacement",
+   "weight": 60,
+   "cui": false,
+   "kind": "composite",
+   "inputs": [
+    "shutdown_required",
+    "downtime_days",
+    "lost_production_category"
+   ],
+   "scale": [
+    "Negligible: no production deferment",
+    "Minor: < 5 % of unit throughput lost for < 7 days",
+    "Moderate: 5–25 % lost or slow-down for 1–2 weeks",
+    "Major: 25–50 % lost or unit outage 2–4 weeks",
+    "Severe: > 50 % lost / full unit or plant outage > 4 weeks"
+   ],
+   "note": "Score = 1 if no shutdown, else MAX(downtime score, lost-production category).",
+   "calc_row": 42,
+   "location": null,
+   "counted": true,
+   "downtime_table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 2,
+     "score": 2
+    },
+    {
+     "lower": 7,
+     "score": 3
+    },
+    {
+     "lower": 14,
+     "score": 4
+    },
+    {
+     "lower": 30,
+     "score": 5
+    }
+   ],
+   "downtime_rows": "Score_Bands!A6:B10",
+   "lost_production_table": [
+    {
+     "option": "Equipment Shut down",
+     "score": 1,
+     "description": null
+    },
+    {
+     "option": "Line/Train",
+     "score": 2,
+     "description": null
+    },
+    {
+     "option": "Unit SD",
+     "score": 3,
+     "description": null
+    },
+    {
+     "option": "Area",
+     "score": 4,
+     "description": null
+    },
+    {
+     "option": "Plant SD",
+     "score": 5,
+     "description": null
+    },
+    {
+     "option": "1",
+     "score": 1,
+     "description": null
+    },
+    {
+     "option": "2",
+     "score": 2,
+     "description": null
+    },
+    {
+     "option": "3",
+     "score": 3,
+     "description": null
+    },
+    {
+     "option": "4",
+     "score": 4,
+     "description": null
+    },
+    {
+     "option": "5",
+     "score": 5,
+     "description": null
+    }
+   ],
+   "lost_production_rows": "Score_Bands!A287:B296"
+  },
+  {
+   "id": "C1.2",
+   "side": "COF",
+   "group": "C1",
+   "label": "Inventory & repair cost",
+   "weight": 40,
+   "cui": false,
+   "kind": "financial",
+   "inputs": [
+    "inventory_kg",
+    "cost_per_kg",
+    "repair_cost"
+   ],
+   "scale": [
+    "0 – <50,000 USD",
+    "50,000 – <250,000 USD",
+    "250,000 – <1,000,000 USD",
+    "1,000,000 – <5,000,000 USD",
+    "≥ 5,000,000 USD"
+   ],
+   "note": "Financial consequence = kg × cost/kg + repair cost → band B02.",
+   "calc_row": 46,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 50000,
+     "score": 2
+    },
+    {
+     "lower": 250000,
+     "score": 3
+    },
+    {
+     "lower": 1000000,
+     "score": 4
+    },
+    {
+     "lower": 5000000,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A14:B18"
+  },
+  {
+   "id": "C2.1",
+   "side": "COF",
+   "group": "C2",
+   "label": "Toxic mixture available",
+   "weight": 5,
+   "cui": false,
+   "kind": "toxic",
+   "inputs": [
+    "toxic_fluid"
+   ],
+   "scale": [
+    "No toxic component (H0)",
+    "Slightly hazardous (H1)",
+    "Hazardous (H2)",
+    "Serious (H3)",
+    "Severe – may cause death (H4)"
+   ],
+   "note": "Score = NFPA rating + 1.",
+   "calc_row": 50,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 5
+    },
+    {
+     "lower": 100,
+     "score": 4
+    },
+    {
+     "lower": 200,
+     "score": 3
+    },
+    {
+     "lower": 500,
+     "score": 2
+    },
+    {
+     "lower": 1000,
+     "score": 1
+    }
+   ],
+   "table_rows": "Score_Bands!A300:B304",
+   "zero_is_zero": false
+  },
+  {
+   "id": "C2.2",
+   "side": "COF",
+   "group": "C2",
+   "label": "Percentage of toxic material",
+   "weight": 25,
+   "cui": false,
+   "kind": "band",
+   "inputs": [
+    "toxic_percentage"
+   ],
+   "scale": [
+    "0 – <0.1 % wt",
+    "0.1 – <1 % wt",
+    "1 – <5 % wt",
+    "5 – <20 % wt",
+    "≥ 20 % wt"
+   ],
+   "note": null,
+   "calc_row": 51,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 0.1,
+     "score": 2
+    },
+    {
+     "lower": 1,
+     "score": 3
+    },
+    {
+     "lower": 5,
+     "score": 4
+    },
+    {
+     "lower": 20,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A22:B26"
+  },
+  {
+   "id": "C2.3",
+   "side": "COF",
+   "group": "C2",
+   "label": "Initial fluid phase",
+   "weight": 5,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "initial_fluid_phase"
+   ],
+   "scale": [
+    "Non-volatile liquid / solid",
+    "Liquid (stays liquid at ambient)",
+    "Liquid (partial flash < 50 %)",
+    "Gas / vapour",
+    "Liquefied gas / dense gas (flash ≥ 50 %)"
+   ],
+   "note": null,
+   "calc_row": 52,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Non-volatile liquid / solid",
+     "score": 1,
+     "description": "Stays put; minimal dispersion"
+    },
+    {
+     "option": "Liquid (stays liquid at ambient)",
+     "score": 2,
+     "description": "Liquid pool formation"
+    },
+    {
+     "option": "Liquid (partial flash < 50 %)",
+     "score": 3,
+     "description": "Two-phase release, aerosol / pool"
+    },
+    {
+     "option": "Gas / vapour",
+     "score": 4,
+     "description": "Rapid dispersion, large cloud potential"
+    },
+    {
+     "option": "Liquefied gas / dense gas (flash ≥ 50 %)",
+     "score": 5,
+     "description": "Flashing release, dense cloud, large affected area"
+    }
+   ],
+   "table_rows": "Score_Bands!A183:B187"
+  },
+  {
+   "id": "C2.4",
+   "side": "COF",
+   "group": "C2",
+   "label": "Detection time",
+   "weight": 8,
+   "cui": false,
+   "kind": "band",
+   "inputs": [
+    "detection_time"
+   ],
+   "scale": [
+    "0 – <5 min",
+    "5 – <15 min",
+    "15 – <60 min",
+    "60 – <240 min",
+    "≥ 240 min"
+   ],
+   "note": null,
+   "calc_row": 53,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 5,
+     "score": 2
+    },
+    {
+     "lower": 10,
+     "score": 3
+    },
+    {
+     "lower": 15,
+     "score": 4
+    },
+    {
+     "lower": 20,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A30:B34"
+  },
+  {
+   "id": "C2.5",
+   "side": "COF",
+   "group": "C2",
+   "label": "Isolation time",
+   "weight": 8,
+   "cui": false,
+   "kind": "band",
+   "inputs": [
+    "isolation_time"
+   ],
+   "scale": [
+    "0 – <5 min",
+    "5 – <15 min",
+    "15 – <30 min",
+    "30 – <60 min",
+    "≥ 60 min"
+   ],
+   "note": null,
+   "calc_row": 54,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 5,
+     "score": 2
+    },
+    {
+     "lower": 15,
+     "score": 3
+    },
+    {
+     "lower": 30,
+     "score": 4
+    },
+    {
+     "lower": 60,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A38:B42"
+  },
+  {
+   "id": "C2.6",
+   "side": "COF",
+   "group": "C2",
+   "label": "Near ignition source",
+   "weight": 5,
+   "cui": false,
+   "kind": "band",
+   "inputs": [
+    "ignition_distance"
+   ],
+   "scale": [
+    "≥ 100 m",
+    "50 – <100 m",
+    "25 – <50 m",
+    "10 – <25 m",
+    "0 – <10 m"
+   ],
+   "note": "Closer ignition source = higher score.",
+   "calc_row": 55,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 5
+    },
+    {
+     "lower": 10,
+     "score": 4
+    },
+    {
+     "lower": 25,
+     "score": 3
+    },
+    {
+     "lower": 50,
+     "score": 2
+    },
+    {
+     "lower": 100,
+     "score": 1
+    }
+   ],
+   "table_rows": "Score_Bands!A46:B50"
+  },
+  {
+   "id": "C2.7",
+   "side": "COF",
+   "group": "C2",
+   "label": "Flammability",
+   "weight": 25,
+   "cui": false,
+   "kind": "flammability",
+   "inputs": [
+    "representative_fluid"
+   ],
+   "scale": [
+    "Will not burn (F0)",
+    "FP > 93 °C (F1)",
+    "FP 38–93 °C (F2)",
+    "FP < 38 °C, BP ≥ 38 °C (F3)",
+    "FP < 23 °C and BP < 38 °C (F4)"
+   ],
+   "note": "Score = NFPA rating + 1.",
+   "calc_row": 57,
+   "location": null,
+   "counted": true
+  },
+  {
+   "id": "C2.8",
+   "side": "COF",
+   "group": "C2",
+   "label": "Operating temperature",
+   "weight": 7,
+   "cui": false,
+   "kind": "band",
+   "inputs": [
+    "operating_temperature"
+   ],
+   "scale": [
+    "< 60 °C",
+    "60 – <150 °C",
+    "150 – <260 °C",
+    "260 – <400 °C",
+    "≥ 400 °C"
+   ],
+   "note": null,
+   "calc_row": 58,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": -273,
+     "score": 1
+    },
+    {
+     "lower": 60,
+     "score": 2
+    },
+    {
+     "lower": 150,
+     "score": 3
+    },
+    {
+     "lower": 260,
+     "score": 4
+    },
+    {
+     "lower": 400,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A54:B58"
+  },
+  {
+   "id": "C2.9",
+   "side": "COF",
+   "group": "C2",
+   "label": "Operating pressure",
+   "weight": 8,
+   "cui": false,
+   "kind": "band",
+   "inputs": [
+    "operating_pressure"
+   ],
+   "scale": [
+    "0 – <5 barg",
+    "5 – <20 barg",
+    "20 – <50 barg",
+    "50 – <100 barg",
+    "≥ 100 barg"
+   ],
+   "note": null,
+   "calc_row": 59,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 5,
+     "score": 2
+    },
+    {
+     "lower": 20,
+     "score": 3
+    },
+    {
+     "lower": 50,
+     "score": 4
+    },
+    {
+     "lower": 100,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A62:B66"
+  },
+  {
+   "id": "C2.10",
+   "side": "COF",
+   "group": "C2",
+   "label": "Flash Point",
+   "weight": 4,
+   "cui": false,
+   "kind": "flash",
+   "inputs": [
+    "representative_fluid",
+    "operating_temperature"
+   ],
+   "scale": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "note": null,
+   "calc_row": 60,
+   "location": null,
+   "counted": true,
+   "steps": [
+    {
+     "up_to_times_temperature": 1.05,
+     "score": 5
+    },
+    {
+     "up_to_times_temperature": 1.1,
+     "score": 4
+    },
+    {
+     "up_to_times_temperature": 1.15,
+     "score": 3
+    },
+    {
+     "up_to_times_temperature": 1.2,
+     "score": 2
+    },
+    {
+     "up_to_times_temperature": 1.25,
+     "score": 1
+    }
+   ]
+  },
+  {
+   "id": "C3.1",
+   "side": "COF",
+   "group": "C3",
+   "label": "Reputation / regulatory sensitivity",
+   "weight": 40,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "reputation"
+   ],
+   "scale": [
+    "No external visibility; no regulatory implication",
+    "Minor: internal reporting only; no regulator notification",
+    "Moderate: regulator notification; local community / media interest",
+    "Major: regulator investigation / enforcement; national media; licence conditions at risk",
+    "Severe: shutdown order, prosecution or loss of licence to operate; international attention"
+   ],
+   "note": "Criteria in Factor_Master C3.1 (K–O).",
+   "calc_row": 63,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Negligible Impact",
+     "score": 1,
+     "description": "Comprehensive coverage with NDE well matched to the damage mechanism"
+    },
+    {
+     "option": "Low impact",
+     "score": 2,
+     "description": "Good coverage / suitable NDE"
+    },
+    {
+     "option": "Moderate Impact",
+     "score": 3,
+     "description": "Partial coverage or moderately suitable NDE"
+    },
+    {
+     "option": "High Impact",
+     "score": 4,
+     "description": "Limited coverage or marginal NDE (e.g. visual only)"
+    },
+    {
+     "option": "Very High Impact",
+     "score": 5,
+     "description": "No inspection or method cannot find the damage"
+    }
+   ],
+   "table_rows": "Score_Bands!A308:B312"
+  },
+  {
+   "id": "C3.2",
+   "side": "COF",
+   "group": "C3",
+   "label": "Environmental",
+   "weight": 20,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "environmental"
+   ],
+   "scale": [
+    "No release to environment; fully contained",
+    "Minor on-site release inside secondary containment; below reportable quantity",
+    "Release beyond containment on site or small reportable release; limited soil / water impact",
+    "Off-site release or significant contamination; remediation > 6 months",
+    "Major off-site pollution (water supply / sensitive habitat); long-term remediation; major penalties"
+   ],
+   "note": "Criteria in Factor_Master C3.2 (K–O).",
+   "calc_row": 64,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Negligible Impact",
+     "score": 1,
+     "description": "Comprehensive coverage with NDE well matched to the damage mechanism"
+    },
+    {
+     "option": "Low impact",
+     "score": 2,
+     "description": "Good coverage / suitable NDE"
+    },
+    {
+     "option": "Moderate Impact",
+     "score": 3,
+     "description": "Partial coverage or moderately suitable NDE"
+    },
+    {
+     "option": "High Impact",
+     "score": 4,
+     "description": "Limited coverage or marginal NDE (e.g. visual only)"
+    },
+    {
+     "option": "Very High Impact",
+     "score": 5,
+     "description": "No inspection or method cannot find the damage"
+    }
+   ],
+   "table_rows": "Score_Bands!A308:B312"
+  },
+  {
+   "id": "C3.3",
+   "side": "COF",
+   "group": "C3",
+   "label": "Workforce available in area",
+   "weight": 40,
+   "cui": false,
+   "kind": "band",
+   "inputs": [
+    "workforce_persons"
+   ],
+   "scale": [
+    "0 – <2 persons",
+    "2 – <6 persons",
+    "6 – <16 persons",
+    "16 – <50 persons",
+    "≥ 50 persons"
+   ],
+   "note": "Persons normally present in the affected area.",
+   "calc_row": 65,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 1,
+     "score": 2
+    },
+    {
+     "lower": 3,
+     "score": 3
+    },
+    {
+     "lower": 6,
+     "score": 4
+    },
+    {
+     "lower": 7,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A70:B74"
+  },
+  {
+   "id": "C4.1",
+   "side": "COF",
+   "group": "C4",
+   "label": "Pressure differential tube side ↔ shell side",
+   "weight": 30,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "pressure_differential"
+   ],
+   "scale": [
+    "0 – <2 barg",
+    "2 – <10 barg",
+    "10 – <30 barg",
+    "30 – <70 barg",
+    "≥ 70 barg"
+   ],
+   "note": "Higher ΔP = higher leak rate and cross-contamination severity.",
+   "calc_row": 68,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 2,
+     "score": 2
+    },
+    {
+     "lower": 10,
+     "score": 3
+    },
+    {
+     "lower": 30,
+     "score": 4
+    },
+    {
+     "lower": 70,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A143:B147"
+  },
+  {
+   "id": "C4.2",
+   "side": "COF",
+   "group": "C4",
+   "label": "Overpressure margin of low-pressure side (10/13 rule)",
+   "weight": 30,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "design_pressure_ratio"
+   ],
+   "scale": [
+    "≥ 1",
+    "0.7692 – <1",
+    "0.65 – <0.7692",
+    "0.5 – <0.65",
+    "0 – <0.5"
+   ],
+   "note": "Below 10/13 (0.769) the low-pressure side may overpressure on tube rupture.",
+   "calc_row": 69,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 5
+    },
+    {
+     "lower": 0.5,
+     "score": 4
+    },
+    {
+     "lower": 0.65,
+     "score": 3
+    },
+    {
+     "lower": 0.7692,
+     "score": 2
+    },
+    {
+     "lower": 1,
+     "score": 1
+    }
+   ],
+   "table_rows": "Score_Bands!A151:B155"
+  },
+  {
+   "id": "C4.3",
+   "side": "COF",
+   "group": "C4",
+   "label": "Tube-leak consequence (fluid pair)",
+   "weight": 30,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "tube_leak_class"
+   ],
+   "scale": [
+    "Both sides non-hazardous (water / air / steam)",
+    "Low-hazard process fluid contaminates utility or other side",
+    "Flammable or toxic fluid leaks into another process stream (contained)",
+    "Flammable or toxic fluid leaks into utility system (cooling water / steam / condensate) that vents or drains to open system",
+    "Hydrogen, HF, H2S-rich or other severe-hazard fluid leaks into a low-pressure side that cannot be isolated or relieved safely"
+   ],
+   "note": null,
+   "calc_row": 70,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Both sides non-hazardous (water / air / steam)",
+     "score": 1,
+     "description": "No safety or environmental consequence from a tube leak"
+    },
+    {
+     "option": "Product contamination / minor environmental impact",
+     "score": 2,
+     "description": "/Low-hazard process fluid contaminates utility or other side"
+    },
+    {
+     "option": "Flammable or toxic fluid leaks into another process stream (contained)",
+     "score": 3,
+     "description": "Stays inside the process envelope"
+    },
+    {
+     "option": "Flammable or toxic fluid leaks into utility system (cooling water / steam / condensate) that vents or drains to open system",
+     "score": 4,
+     "description": "Release at cooling tower, vents or drains"
+    },
+    {
+     "option": "severe-hazard fluid leaks into a low-pressure side that cannot be isolated or relieved safely",
+     "score": 5,
+     "description": "Severe release or overpressure of low-pressure side -Hydrogen, HF, H2S-rich or other"
+    }
+   ],
+   "table_rows": "Score_Bands!A240:B244"
+  },
+  {
+   "id": "C4.4",
+   "side": "COF",
+   "group": "C4",
+   "label": "Tube-rupture protection / detection",
+   "weight": 10,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "rupture_protection"
+   ],
+   "scale": [
+    "Adequate: relief verified for tube-rupture case, or low-pressure side rated for HP pressure",
+    "—",
+    "Relief present; tube-rupture case not verified",
+    "Unknown",
+    "No relief and 10/13 rule not satisfied"
+   ],
+   "note": null,
+   "calc_row": 71,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Adequate: relief verified for tube-rupture case, or low-pressure side rated for HP pressure",
+     "score": 1,
+     "description": "Tube-rupture overpressure case closed out"
+    },
+    {
+     "option": "Relief present; tube-rupture case not verified",
+     "score": 3,
+     "description": "Verify against API 521 tube-rupture case"
+    },
+    {
+     "option": "Unknown",
+     "score": 4,
+     "description": "Treat as unprotected until verified"
+    },
+    {
+     "option": "No relief and 10/13 rule not satisfied",
+     "score": 5,
+     "description": "Overpressure of low-pressure side credible"
+    }
+   ],
+   "table_rows": "Score_Bands!A248:B251"
+  },
+  {
+   "id": "P1.7",
+   "side": "POF",
+   "group": "PT",
+   "label": "Coating quality",
+   "weight": 2,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "coating_quality"
+   ],
+   "scale": [
+    "Excellent: new / intact, correct system for service",
+    "Good: minor breakdown < 5 % of surface",
+    "Fair: 5–20 % breakdown or localised rust",
+    "Poor: 20–50 % breakdown, widespread rust",
+    "Failed / none: > 50 % breakdown or unprotected"
+   ],
+   "note": "Criteria in Factor_Master P1.7.",
+   "calc_row": 74,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Poor",
+     "score": 5,
+     "description": "Poor or dent found"
+    },
+    {
+     "option": "Damaged",
+     "score": 5,
+     "description": "Damaged observed"
+    },
+    {
+     "option": "Average",
+     "score": 3,
+     "description": "Old Not visually damaged but can be"
+    },
+    {
+     "option": "Good",
+     "score": 2,
+     "description": "old but without any single issue"
+    },
+    {
+     "option": "V Good/New",
+     "score": 1,
+     "description": "New or nearly new"
+    },
+    {
+     "option": "Coating Not required by Design",
+     "score": 1,
+     "description": "New or nearly new"
+    },
+    {
+     "option": "Coating required but not coated",
+     "score": 5,
+     "description": "New or nearly new"
+    }
+   ],
+   "table_rows": "Score_Bands!A277:B283"
+  },
+  {
+   "id": "P1.8",
+   "side": "POF",
+   "group": "PT",
+   "label": "Damage mechanism – external- Shell Side",
+   "weight": 10,
+   "cui": false,
+   "kind": "dm",
+   "inputs": [
+    "mechanisms"
+   ],
+   "scale": [
+    "No credible external damage mechanism",
+    "Low susceptibility / severity (mild atmospheric corrosion)",
+    "Moderate (humid / marine atmosphere; CUI possible but mitigated)",
+    "High (CUI at susceptible temperature; ESCC credible)",
+    "Severe / active damage confirmed (CUI or cracking found)"
+   ],
+   "note": "Combined score of all EXTERNAL damage mechanisms entered on DM_Register (1 if none).",
+   "calc_row": 75,
+   "location": "External",
+   "counted": true
+  },
+  {
+   "id": "P2.1",
+   "side": "POF",
+   "group": "PT",
+   "label": "Damage mechanism – internal- Tube Side",
+   "weight": 15,
+   "cui": false,
+   "kind": "dm",
+   "inputs": [
+    "mechanisms"
+   ],
+   "scale": [
+    "No credible internal damage mechanism",
+    "Low: low-severity general thinning, well understood",
+    "Moderate: corrosion / erosion with measured rates, manageable",
+    "High: aggressive thinning, localised corrosion or cracking susceptibility",
+    "Severe / active: rapid thinning or cracking (SCC, HIC, HTHA…) confirmed"
+   ],
+   "note": "Combined score of all INTERNAL damage mechanisms entered on DM_Register (1 if none).",
+   "calc_row": 76,
+   "location": "Internal",
+   "counted": true
+  },
+  {
+   "id": "P2.2",
+   "side": "POF",
+   "group": "PT",
+   "label": "Corrosion trend (damage severity)",
+   "weight": 2,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "corrosion_trend"
+   ],
+   "scale": [
+    "Decreasing",
+    "Stable",
+    "Slowly increasing",
+    "Increasing",
+    "Rapidly increasing / unknown"
+   ],
+   "note": "Trend of process / damage severity.",
+   "calc_row": 77,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Decreasing",
+     "score": 1,
+     "description": "Improving / mitigated"
+    },
+    {
+     "option": "Stable",
+     "score": 2,
+     "description": "Steady, well controlled"
+    },
+    {
+     "option": "Slowly increasing",
+     "score": 3,
+     "description": "Mild upward drift"
+    },
+    {
+     "option": "Increasing",
+     "score": 4,
+     "description": "Clear upward trend"
+    },
+    {
+     "option": "Rapidly increasing / unknown",
+     "score": 5,
+     "description": "Accelerating or no basis to judge"
+    }
+   ],
+   "table_rows": "Score_Bands!A217:B221"
+  },
+  {
+   "id": "P2.3",
+   "side": "POF",
+   "group": "PT",
+   "label": "Internal corrosion type",
+   "weight": 3,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "internal_corrosion_type"
+   ],
+   "scale": [
+    "No corrosion expected",
+    "Uniform thinning (general)",
+    "Mixed uniform + localised",
+    "Localised (pitting / MIC / erosion-corrosion)",
+    "Cracking / environmental (SCC, HIC, HTHA…)"
+   ],
+   "note": null,
+   "calc_row": 78,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "No corrosion expected",
+     "score": 1,
+     "description": "Inert / non-corrosive service"
+    },
+    {
+     "option": "Uniform thinning (general)",
+     "score": 2,
+     "description": "Predictable, measurable loss"
+    },
+    {
+     "option": "Mixed uniform + localised",
+     "score": 3,
+     "description": "General loss with some localised attack"
+    },
+    {
+     "option": "Localised (pitting / MIC / erosion-corrosion)",
+     "score": 4,
+     "description": "Hard to find and predict"
+    },
+    {
+     "option": "Cracking / environmental (SCC, HIC, HTHA…)",
+     "score": 5,
+     "description": "Sudden failure potential, little warning"
+    }
+   ],
+   "table_rows": "Score_Bands!A209:B213"
+  },
+  {
+   "id": "P2.5",
+   "side": "POF",
+   "group": "PT",
+   "label": "Component life",
+   "weight": 3,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "component_life_ratio"
+   ],
+   "scale": [
+    "0 – <0.25",
+    "0.25 – <0.5",
+    "0.5 – <0.75",
+    "0.75 – <1",
+    "≥ 1"
+   ],
+   "note": null,
+   "calc_row": 79,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 0.25,
+     "score": 2
+    },
+    {
+     "lower": 0.5,
+     "score": 3
+    },
+    {
+     "lower": 0.75,
+     "score": 4
+    },
+    {
+     "lower": 1,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A127:B131"
+  },
+  {
+   "id": "P2.6",
+   "side": "POF",
+   "group": "PT",
+   "label": "Wall ratio",
+   "weight": 8,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "wall_ratio"
+   ],
+   "scale": [
+    "0 – <0.5",
+    "0.5 – <0.65",
+    "0.65 – <0.8",
+    "0.8 – <0.9",
+    "≥ 0.9"
+   ],
+   "note": null,
+   "calc_row": 80,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 0.5,
+     "score": 2
+    },
+    {
+     "lower": 0.65,
+     "score": 3
+    },
+    {
+     "lower": 0.8,
+     "score": 4
+    },
+    {
+     "lower": 0.9,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A135:B139"
+  },
+  {
+   "id": "P2.7",
+   "side": "POF",
+   "group": "PT",
+   "label": "Operation data status",
+   "weight": 5,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "operation_data_status"
+   ],
+   "scale": [
+    "Continuous monitoring + historian (≥ 5 yrs)",
+    "Regular logs, good records",
+    "Partial records",
+    "Limited / estimated data",
+    "No data / unknown operating history"
+   ],
+   "note": null,
+   "calc_row": 81,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Continuous monitoring + historian (≥ 5 yrs)",
+     "score": 1,
+     "description": "Full process history, IOW compliance tracked"
+    },
+    {
+     "option": "Regular logs, good records",
+     "score": 2,
+     "description": "Reliable but not continuous"
+    },
+    {
+     "option": "Partial records",
+     "score": 3,
+     "description": "Gaps in operating history"
+    },
+    {
+     "option": "Limited / estimated data",
+     "score": 4,
+     "description": "Mostly design-basis assumptions"
+    },
+    {
+     "option": "No data / unknown operating history",
+     "score": 5,
+     "description": "Cannot confirm operating conditions"
+    }
+   ],
+   "table_rows": "Score_Bands!A225:B229"
+  },
+  {
+   "id": "P2.8",
+   "side": "POF",
+   "group": "PT",
+   "label": "No. of internal inspections",
+   "weight": 5,
+   "cui": false,
+   "kind": "band",
+   "inputs": [
+    "internal_inspections"
+   ],
+   "scale": [
+    "≥ 4 inspections",
+    "3 – <4 inspections",
+    "2 – <3 inspections",
+    "1 – <2 inspections",
+    "0 – <1 inspections"
+   ],
+   "note": "Internal inspections performed.",
+   "calc_row": 82,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 5
+    },
+    {
+     "lower": 1,
+     "score": 4
+    },
+    {
+     "lower": 2,
+     "score": 3
+    },
+    {
+     "lower": 3,
+     "score": 2
+    },
+    {
+     "lower": 4,
+     "score": 1
+    }
+   ],
+   "table_rows": "Score_Bands!A111:B115"
+  },
+  {
+   "id": "P2.9",
+   "side": "POF",
+   "group": "PT",
+   "label": "Inspection confidence – internal",
+   "weight": 5,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "internal_inspection_confidence"
+   ],
+   "scale": [
+    "A – Highly effective",
+    "B – Usually effective",
+    "C – Fairly effective",
+    "D – Poorly effective",
+    "E – Ineffective / none"
+   ],
+   "note": null,
+   "calc_row": 83,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "A – Highly effective",
+     "score": 1,
+     "description": "Comprehensive coverage with NDE well matched to the damage mechanism"
+    },
+    {
+     "option": "B – Usually effective",
+     "score": 2,
+     "description": "Good coverage / suitable NDE"
+    },
+    {
+     "option": "C – Fairly effective",
+     "score": 3,
+     "description": "Partial coverage or moderately suitable NDE"
+    },
+    {
+     "option": "D – Poorly effective",
+     "score": 4,
+     "description": "Limited coverage or marginal NDE (e.g. visual only)"
+    },
+    {
+     "option": "E – Ineffective / none",
+     "score": 5,
+     "description": "No inspection or method cannot find the damage"
+    }
+   ],
+   "table_rows": "Score_Bands!A201:B205"
+  },
+  {
+   "id": "P2.10",
+   "side": "POF",
+   "group": "PT",
+   "label": "Time since last internal inspection",
+   "weight": 3,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "years_since_internal_inspection"
+   ],
+   "scale": [
+    "0 – <2 yrs",
+    "2 – <4 yrs",
+    "4 – <6 yrs",
+    "6 – <10 yrs",
+    "≥ 10 yrs"
+   ],
+   "note": "Blank last-inspection date = never inspected → score 5.",
+   "calc_row": 84,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 2,
+     "score": 2
+    },
+    {
+     "lower": 4,
+     "score": 3
+    },
+    {
+     "lower": 6,
+     "score": 4
+    },
+    {
+     "lower": 10,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A119:B123",
+   "blank_score": 5
+  },
+  {
+   "id": "P2.11",
+   "side": "POF",
+   "group": "PT",
+   "label": "Equipment not in service (preserved)",
+   "weight": 2,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "service_status"
+   ],
+   "scale": [
+    "In service",
+    "Out of service – properly preserved",
+    "—",
+    "Out of service – partly preserved",
+    "Out of service – not preserved"
+   ],
+   "note": null,
+   "calc_row": 85,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "In service",
+     "score": 1,
+     "description": "Normal operation"
+    },
+    {
+     "option": "Out of service – properly preserved",
+     "score": 2,
+     "description": "Dry / inerted / protected"
+    },
+    {
+     "option": "Out of service – partly preserved",
+     "score": 4,
+     "description": "Incomplete preservation"
+    },
+    {
+     "option": "Out of service – not preserved",
+     "score": 5,
+     "description": "Exposed to wet / stagnant conditions"
+    }
+   ],
+   "table_rows": "Score_Bands!A233:B236"
+  },
+  {
+   "id": "P3.1",
+   "side": "POF",
+   "group": "PT",
+   "label": "Pressure differential (tube stress & leak driving force)",
+   "weight": 15,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "pressure_differential"
+   ],
+   "scale": [
+    "0 – <2 barg",
+    "2 – <10 barg",
+    "10 – <30 barg",
+    "30 – <70 barg",
+    "≥ 70 barg"
+   ],
+   "note": "ΔP loads tubes / tubesheet and drives leak flow.",
+   "calc_row": 86,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 2,
+     "score": 2
+    },
+    {
+     "lower": 10,
+     "score": 3
+    },
+    {
+     "lower": 30,
+     "score": 4
+    },
+    {
+     "lower": 70,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A143:B147"
+  },
+  {
+   "id": "P3.2",
+   "side": "POF",
+   "group": "PT",
+   "label": "Remaining life – tube bundle",
+   "weight": 12,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "remaining_life_internal"
+   ],
+   "scale": [
+    "≥ 20 yrs",
+    "10 – <20 yrs",
+    "5 – <10 yrs",
+    "2 – <5 yrs",
+    "0 – <2 yrs"
+   ],
+   "note": "Remaining life of the tube bundle.",
+   "calc_row": 87,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 5
+    },
+    {
+     "lower": 2,
+     "score": 4
+    },
+    {
+     "lower": 5,
+     "score": 3
+    },
+    {
+     "lower": 10,
+     "score": 2
+    },
+    {
+     "lower": 20,
+     "score": 1
+    }
+   ],
+   "table_rows": "Score_Bands!A103:B107"
+  },
+  {
+   "id": "P3.3",
+   "side": "POF",
+   "group": "PT",
+   "label": "Maximum tube wall loss",
+   "weight": 3,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "wall_loss_pct"
+   ],
+   "scale": [
+    "0 – <15 % wall",
+    "15 – <30 % wall",
+    "30 – <45 % wall",
+    "45 – <60 % wall",
+    "≥ 60 % wall"
+   ],
+   "note": null,
+   "calc_row": 88,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 20,
+     "score": 2
+    },
+    {
+     "lower": 30,
+     "score": 3
+    },
+    {
+     "lower": 40,
+     "score": 4
+    },
+    {
+     "lower": 50,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A159:B163"
+  },
+  {
+   "id": "P3.4",
+   "side": "POF",
+   "group": "PT",
+   "label": "Plugged tubes",
+   "weight": 3,
+   "cui": false,
+   "kind": "derived_band",
+   "inputs": [
+    "plugged_pct"
+   ],
+   "scale": [
+    "0 – <2 % tubes",
+    "2 – <5 % tubes",
+    "5 – <10 % tubes",
+    "10 – <20 % tubes",
+    "≥ 20 % tubes"
+   ],
+   "note": null,
+   "calc_row": 89,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "lower": 0,
+     "score": 1
+    },
+    {
+     "lower": 2,
+     "score": 2
+    },
+    {
+     "lower": 5,
+     "score": 3
+    },
+    {
+     "lower": 10,
+     "score": 4
+    },
+    {
+     "lower": 15,
+     "score": 5
+    }
+   ],
+   "table_rows": "Score_Bands!A167:B171"
+  },
+  {
+   "id": "P3.5",
+   "side": "POF",
+   "group": "PT",
+   "label": "Flow-induced vibration / fouling susceptibility",
+   "weight": 4,
+   "cui": false,
+   "kind": "map",
+   "inputs": [
+    "fiv_fouling"
+   ],
+   "scale": [
+    "None: design checked, clean service, no vibration history",
+    "Low: minor fouling, vibration screening passed",
+    "Moderate: periodic fouling or marginal vibration margin",
+    "High: heavy fouling or known vibration / fretting at supports",
+    "Severe: tube failures from vibration / fouling in history"
+   ],
+   "note": "Criteria in Factor_Master P3.5.",
+   "calc_row": 90,
+   "location": null,
+   "counted": true,
+   "table": [
+    {
+     "option": "Negligible Impact",
+     "score": 1,
+     "description": "Comprehensive coverage with NDE well matched to the damage mechanism"
+    },
+    {
+     "option": "Low impact",
+     "score": 2,
+     "description": "Good coverage / suitable NDE"
+    },
+    {
+     "option": "Moderate Impact",
+     "score": 3,
+     "description": "Partial coverage or moderately suitable NDE"
+    },
+    {
+     "option": "High Impact",
+     "score": 4,
+     "description": "Limited coverage or marginal NDE (e.g. visual only)"
+    },
+    {
+     "option": "Very High Impact",
+     "score": 5,
+     "description": "No inspection or method cannot find the damage"
+    }
+   ],
+   "table_rows": "Score_Bands!A308:B312"
+  }
+ ],
+ "inputs": [
+  {
+   "key": "assessment_date",
+   "kind": "date",
+   "section": "equipment",
+   "row": 8,
+   "label": "Assessment date",
+   "unit": "date (set on Config)",
+   "note": "All age / time-since calculations use this date.",
+   "source": "User"
+  },
+  {
+   "key": "in_service_date",
+   "kind": "date",
+   "section": "equipment",
+   "row": 9,
+   "label": "In-service date",
+   "unit": "date",
+   "note": null,
+   "source": "User"
+  },
+  {
+   "key": "design_life_years",
+   "kind": "number",
+   "section": "equipment",
+   "row": 10,
+   "label": "Design life",
+   "unit": "years",
+   "note": null,
+   "source": "User"
+  },
+  {
+   "key": "tube_operating_pressure",
+   "kind": "number",
+   "section": "equipment",
+   "row": 11,
+   "label": "Tube-side operating pressure",
+   "unit": "barg",
+   "note": null,
+   "source": "Software"
+  },
+  {
+   "key": "shell_operating_pressure",
+   "kind": "number",
+   "section": "equipment",
+   "row": 12,
+   "label": "Shell-side operating pressure",
+   "unit": "barg",
+   "note": null,
+   "source": "Software"
+  },
+  {
+   "key": "tube_design_pressure",
+   "kind": "number",
+   "section": "equipment",
+   "row": 13,
+   "label": "Tube-side design pressure",
+   "unit": "barg",
+   "note": null,
+   "source": "Software"
+  },
+  {
+   "key": "shell_design_pressure",
+   "kind": "number",
+   "section": "equipment",
+   "row": 14,
+   "label": "Shell-side design pressure",
+   "unit": "barg",
+   "note": null,
+   "source": "Software"
+  },
+  {
+   "key": "total_tubes",
+   "kind": "number",
+   "section": "equipment",
+   "row": 15,
+   "label": "Total number of tubes",
+   "unit": "count",
+   "note": null,
+   "source": "Software"
+  },
+  {
+   "key": "plugged_tubes",
+   "kind": "number",
+   "section": "equipment",
+   "row": 16,
+   "label": "Number of plugged tubes",
+   "unit": "count",
+   "note": null,
+   "source": "User"
+  },
+  {
+   "key": "t_nominal",
+   "kind": "number",
+   "section": "equipment",
+   "row": 17,
+   "label": "Nominal Tube thickness t_nom",
+   "unit": "mm",
+   "note": null,
+   "source": "Software"
+  },
+  {
+   "key": "t_actual",
+   "kind": "number",
+   "section": "equipment",
+   "row": 18,
+   "label": "Latest measured Tube Thickness",
+   "unit": "mm",
+   "note": "Minimum measured / governing thickness.",
+   "source": "Software"
+  },
+  {
+   "key": "t_min",
+   "kind": "number",
+   "section": "equipment",
+   "row": 19,
+   "label": "Required minimum Tube Thickness",
+   "unit": "mm",
+   "note": "From code calculation (pressure / structural).",
+   "source": "Software"
+  },
+  {
+   "key": "internal_corrosion_rate",
+   "kind": "number",
+   "section": "equipment",
+   "row": 20,
+   "label": "Internal corrosion rate- Tube Side",
+   "unit": "mm/yr",
+   "note": null,
+   "source": "Software/User"
+  },
+  {
+   "key": "last_internal_inspection",
+   "kind": "date",
+   "section": "equipment",
+   "row": 21,
+   "label": "Last internal inspection date",
+   "unit": "date",
+   "note": "Leave blank if never inspected (scores 5).",
+   "source": "User"
+  },
+  {
+   "key": "shutdown_required",
+   "kind": "yesno",
+   "section": "C1",
+   "row": 39,
+   "label": "Shutdown required for repair / replacement?",
+   "unit": "Yes / No",
+   "note": "If No, production-loss score = 1.",
+   "source": null
+  },
+  {
+   "key": "downtime_days",
+   "kind": "number",
+   "section": "C1",
+   "row": 40,
+   "label": "Downtime days for repair / replacement",
+   "unit": "days",
+   "note": "Score shown = band B01.",
+   "source": null
+  },
+  {
+   "key": "lost_production_category",
+   "kind": "select",
+   "section": "C1",
+   "row": 41,
+   "label": "Lost-production category",
+   "unit": "1–5",
+   "note": "See Factor_Master C1.1 (K–O).",
+   "source": null
+  },
+  {
+   "key": "inventory_kg",
+   "kind": "number",
+   "section": "C1",
+   "row": 43,
+   "label": "Inventory",
+   "unit": "kg",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "cost_per_kg",
+   "kind": "number",
+   "section": "C1",
+   "row": 44,
+   "label": "Cost per kg",
+   "unit": "USD/kg",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "repair_cost",
+   "kind": "number",
+   "section": "C1",
+   "row": 45,
+   "label": "Estimated repair / replacement / clean-up cost",
+   "unit": "USD",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "toxic_fluid",
+   "kind": "fluid",
+   "section": "C2",
+   "row": 49,
+   "label": "Toxic fluid",
+   "unit": null,
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "toxic_percentage",
+   "kind": "number",
+   "section": "C2",
+   "row": 51,
+   "label": "Percentage of toxic material",
+   "unit": "% wt",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "initial_fluid_phase",
+   "kind": "select",
+   "section": "C2",
+   "row": 52,
+   "label": "Initial fluid phase",
+   "unit": "list (M02)",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "detection_time",
+   "kind": "number",
+   "section": "C2",
+   "row": 53,
+   "label": "Detection time",
+   "unit": "minutes",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "isolation_time",
+   "kind": "number",
+   "section": "C2",
+   "row": 54,
+   "label": "Isolation time",
+   "unit": "minutes",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "ignition_distance",
+   "kind": "number",
+   "section": "C2",
+   "row": 55,
+   "label": "Near ignition source",
+   "unit": "metres",
+   "note": "Closer ignition source = higher score.",
+   "source": null
+  },
+  {
+   "key": "representative_fluid",
+   "kind": "fluid",
+   "section": "C2",
+   "row": 56,
+   "label": "Flamable Fluid",
+   "unit": null,
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "operating_temperature",
+   "kind": "number",
+   "section": "C2",
+   "row": 58,
+   "label": "Operating temperature",
+   "unit": "°C",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "operating_pressure",
+   "kind": "number",
+   "section": "C2",
+   "row": 59,
+   "label": "Operating pressure",
+   "unit": "barg",
+   "note": null,
+   "source": null,
+   "linked_to": "tube_operating_pressure"
+  },
+  {
+   "key": "reputation",
+   "kind": "select",
+   "section": "C3",
+   "row": 63,
+   "label": "Reputation / regulatory sensitivity",
+   "unit": "1–5",
+   "note": "Criteria in Factor_Master C3.1 (K–O).",
+   "source": null
+  },
+  {
+   "key": "environmental",
+   "kind": "select",
+   "section": "C3",
+   "row": 64,
+   "label": "Environmental",
+   "unit": "1–5",
+   "note": "Criteria in Factor_Master C3.2 (K–O).",
+   "source": null
+  },
+  {
+   "key": "workforce_persons",
+   "kind": "number",
+   "section": "C3",
+   "row": 65,
+   "label": "Workforce available in area",
+   "unit": "persons",
+   "note": "Persons normally present in the affected area.",
+   "source": null
+  },
+  {
+   "key": "tube_leak_class",
+   "kind": "select",
+   "section": "C4",
+   "row": 70,
+   "label": "Tube-leak consequence (fluid pair)",
+   "unit": "list (M09)",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "rupture_protection",
+   "kind": "select",
+   "section": "C4",
+   "row": 71,
+   "label": "Tube-rupture protection / detection",
+   "unit": "list (M10)",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "coating_quality",
+   "kind": "select",
+   "section": "PT",
+   "row": 74,
+   "label": "Coating quality",
+   "unit": null,
+   "note": "Criteria in Factor_Master P1.7.",
+   "source": null
+  },
+  {
+   "key": "corrosion_trend",
+   "kind": "select",
+   "section": "PT",
+   "row": 77,
+   "label": "Corrosion trend (damage severity)",
+   "unit": "list (M06)",
+   "note": "Trend of process / damage severity.",
+   "source": null
+  },
+  {
+   "key": "internal_corrosion_type",
+   "kind": "select",
+   "section": "PT",
+   "row": 78,
+   "label": "Internal corrosion type",
+   "unit": "list (M05)",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "operation_data_status",
+   "kind": "select",
+   "section": "PT",
+   "row": 81,
+   "label": "Operation data status",
+   "unit": "list (M07)",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "internal_inspections",
+   "kind": "number",
+   "section": "PT",
+   "row": 82,
+   "label": "No. of internal inspections",
+   "unit": "count",
+   "note": "Internal inspections performed.",
+   "source": null
+  },
+  {
+   "key": "internal_inspection_confidence",
+   "kind": "select",
+   "section": "PT",
+   "row": 83,
+   "label": "Inspection confidence – internal",
+   "unit": "list (M04)",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "service_status",
+   "kind": "select",
+   "section": "PT",
+   "row": 85,
+   "label": "Equipment not in service (preserved)",
+   "unit": "list (M08)",
+   "note": null,
+   "source": null
+  },
+  {
+   "key": "fiv_fouling",
+   "kind": "select",
+   "section": "PT",
+   "row": 90,
+   "label": "Flow-induced vibration / fouling susceptibility",
+   "unit": "1–5",
+   "note": "Criteria in Factor_Master P3.5.",
+   "source": null
+  }
+ ],
+ "sections": {
+  "equipment": "0. EQUIPMENT & INTEGRITY DATA (driver inputs)",
+  "C1": "COF-1 Production & financial impact",
+  "C2": "COF-2 Process-fluid hazard (safety)",
+  "C3": "COF-3 Reputation, regulatory, environment & personnel",
+  "C4": "COF-4 Tube bundle – pressure differential & cross-leak (heat exchangers only)",
+  "PT": "POF-3  Tube bundle"
+ },
+ "derived": [
+  {
+   "key": "age_years",
+   "row": 22,
+   "label": "Equipment age",
+   "unit": "years",
+   "note": "(assessment date − in-service date) ÷ 365.25",
+   "how": "Calculate"
+  },
+  {
+   "key": "component_life_ratio",
+   "row": 23,
+   "label": "Component life ratio",
+   "unit": "age ÷ design life",
+   "note": null,
+   "how": "Calculate"
+  },
+  {
+   "key": "remaining_allowance",
+   "row": 24,
+   "label": "Remaining corrosion allowance",
+   "unit": "mm",
+   "note": "t_actual − t_min (shared by all rate-based mechanisms)",
+   "how": "Calculate"
+  },
+  {
+   "key": "wall_ratio",
+   "row": 25,
+   "label": "Wall ratio",
+   "unit": "t_min ÷ t_actual",
+   "note": null,
+   "how": "Calculate"
+  },
+  {
+   "key": "years_since_internal_inspection",
+   "row": 26,
+   "label": "Time since last internal inspection",
+   "unit": "years",
+   "note": null,
+   "how": null
+  },
+  {
+   "key": "pressure_differential",
+   "row": 28,
+   "label": "Pressure differential ΔP",
+   "unit": "barg",
+   "note": "|tube − shell| operating pressure",
+   "how": "Calculate"
+  },
+  {
+   "key": "higher_pressure_side",
+   "row": 29,
+   "label": "Higher-pressure side",
+   "unit": null,
+   "note": "Operating pressure decides which side is the HP side.",
+   "how": "Calculate"
+  },
+  {
+   "key": "design_pressure_hp",
+   "row": 30,
+   "label": "Design pressure – high-pressure side",
+   "unit": "barg",
+   "note": null,
+   "how": "Equipment register"
+  },
+  {
+   "key": "design_pressure_lp",
+   "row": 31,
+   "label": "Design pressure – low-pressure side",
+   "unit": "barg",
+   "note": null,
+   "how": "Equipment register"
+  },
+  {
+   "key": "design_pressure_ratio",
+   "row": 32,
+   "label": "Design-pressure ratio (LP ÷ HP)",
+   "unit": "ratio",
+   "note": null,
+   "how": "Calculate"
+  },
+  {
+   "key": "rule_10_13",
+   "row": 33,
+   "label": "10/13 rule status",
+   "unit": null,
+   "note": "Limit on Config section F.",
+   "how": "Calculate"
+  },
+  {
+   "key": "wall_loss_pct",
+   "row": 34,
+   "label": "Maximum tube wall loss",
+   "unit": "% of nominal wall",
+   "note": null,
+   "how": "Calculate"
+  },
+  {
+   "key": "plugged_pct",
+   "row": 35,
+   "label": "Plugged tubes",
+   "unit": "% of tubes",
+   "note": null,
+   "how": "Calculate"
+  },
+  {
+   "key": "remaining_life_internal",
+   "row": 36,
+   "label": "Remaining life – tube bundle",
+   "unit": "years",
+   "note": "(tube wall − tube t_min) ÷ tube rate",
+   "how": "Calculate"
+  }
+ ],
+ "corrosion_rate_kinds": [
+  "Controlling",
+  "Short term",
+  "Long term",
+  "Expected"
+ ],
+ "settings": {
+  "normalise_uninsulated": 0,
+  "hard_override": 1,
+  "interval_fraction": 0.5,
+  "unlimited_life_years": 1000,
+  "dm_anchor_frequency": 1e-05,
+  "dm_decades_per_step": 1,
+  "dm_weight_damage": 70,
+  "dm_weight_inspection": 30,
+  "dm_credible_from": 2,
+  "override_applied": 1,
+  "design_pressure_ratio_limit": 0.7692307692307693
+ },
+ "categories": [
+  {
+   "lower": 0,
+   "category": 1,
+   "pof_label": "Very Low",
+   "cof_label": "Negligible"
+  },
+  {
+   "lower": 1.5,
+   "category": 2,
+   "pof_label": "Low",
+   "cof_label": "Minor"
+  },
+  {
+   "lower": 2.5,
+   "category": 3,
+   "pof_label": "Medium",
+   "cof_label": "Moderate"
+  },
+  {
+   "lower": 3.5,
+   "category": 4,
+   "pof_label": "High",
+   "cof_label": "Major"
+  },
+  {
+   "lower": 4.5,
+   "category": 5,
+   "pof_label": "Very High",
+   "cof_label": "Catastrophic"
+  }
+ ],
+ "matrix": {
+  "5": [
+   "Medium",
+   "Medium High",
+   "High",
+   "High",
+   "High"
+  ],
+  "4": [
+   "Medium",
+   "Medium",
+   "Medium High",
+   "High",
+   "High"
+  ],
+  "3": [
+   "Low",
+   "Medium",
+   "Medium",
+   "Medium High",
+   "High"
+  ],
+  "2": [
+   "Low",
+   "Low",
+   "Medium",
+   "Medium",
+   "Medium High"
+  ],
+  "1": [
+   "Low",
+   "Low",
+   "Low",
+   "Medium",
+   "Medium"
+  ]
+ },
+ "levels": [
+  {
+   "label": "Low",
+   "rank": 1,
+   "max_interval_years": 20,
+   "min_effectiveness": "C – Fairly effective",
+   "action": "Routine: continue the normal inspection / monitoring plan.",
+   "colour": "#C6EFCE"
+  },
+  {
+   "label": "Medium",
+   "rank": 2,
+   "max_interval_years": 15,
+   "min_effectiveness": "C – Fairly effective",
+   "action": "Maintain plan; confirm damage-mechanism monitoring is adequate.",
+   "colour": "#FFEB9C"
+  },
+  {
+   "label": "Medium High",
+   "rank": 3,
+   "max_interval_years": 10,
+   "min_effectiveness": "B – Usually effective",
+   "action": "Prioritise: raise inspection effectiveness and / or add mitigation within the planning cycle.",
+   "colour": "#F8CBAD"
+  },
+  {
+   "label": "High",
+   "rank": 4,
+   "max_interval_years": 5,
+   "min_effectiveness": "A – Highly effective",
+   "action": "Urgent: risk-reduction action required (inspection, mitigation, operating change); escalate to management.",
+   "colour": "#FF9999"
+  }
+ ],
+ "priority": {
+  "5": [
+   11,
+   7,
+   4,
+   2,
+   1
+  ],
+  "4": [
+   16,
+   13,
+   8,
+   6,
+   3
+  ],
+  "3": [
+   20,
+   17,
+   14,
+   9,
+   5
+  ],
+  "2": [
+   23,
+   21,
+   18,
+   15,
+   10
+  ],
+  "1": [
+   25,
+   24,
+   22,
+   19,
+   12
+  ]
+ },
+ "shape": {
+  "priority_rows": "cof",
+  "due_window_days": 183
+ },
+ "wall_ratio": "min_over_actual",
+ "rule_10_13_texts": [
+  "Satisfied – tube-rupture overpressure unlikely to govern",
+  "NOT satisfied – tube-rupture overpressure credible; verify relief (API 521 case)"
+ ],
+ "dm_life_factor": "P3.2",
+ "linked": {
+  "operating_pressure": "tube_operating_pressure"
+ },
+ "fluids": {
+  "columns": {
+   "A": "Toxic",
+   "B": "Flamable",
+   "C": null,
+   "D": "CS #",
+   "E": "Toxicity (Concentration)",
+   "F": "Flamability",
+   "G": "Unit",
+   "H": "Toxicity by Meridium",
+   "I": "Flamabiltiy by Meridium",
+   "J": "Flash Point"
+  }
+ },
+ "mechanism_names": [
+  "General / uniform corrosion",
+  "Localised / pitting corrosion",
+  "Erosion / erosion-corrosion",
+  "Under-deposit / microbiologically influenced corrosion (MIC)",
+  "CO2 corrosion",
+  "Sulfidic corrosion (high temperature)",
+  "Naphthenic acid corrosion",
+  "HCl / overhead dew-point corrosion",
+  "Ammonium bisulfide (sour water) corrosion",
+  "Amine corrosion",
+  "Boiler-water / condensate corrosion",
+  "Flow-accelerated corrosion (FAC)",
+  "Galvanic corrosion",
+  "Chloride stress corrosion cracking (austenitic SS)",
+  "Caustic stress corrosion cracking",
+  "Amine stress corrosion cracking",
+  "Polythionic acid stress corrosion cracking",
+  "Wet H2S damage (blistering, HIC, SOHIC, SSC)",
+  "High-temperature hydrogen attack (HTHA)",
+  "Creep / stress rupture",
+  "Sigma-phase / 475 °C embrittlement",
+  "Thermal fatigue",
+  "Mechanical / vibration fatigue",
+  "Brittle fracture",
+  "Corrosion under insulation (CS / low alloy)",
+  "External chloride SCC under insulation (austenitic SS)",
+  "Atmospheric corrosion",
+  "Soil-side corrosion (buried / tank bottom)",
+  "Tube-side under-deposit / fouling corrosion",
+  "Tube inlet-end erosion-corrosion",
+  "Tube vibration / fretting wear at supports",
+  "Tube-to-tubesheet joint / crevice corrosion",
+  "Shell-side corrosion of tubes"
+ ],
+ "known_issues": [
+  "RBI_Calc!G61 holds =SUM(G49:G59): the COF-2 sum stops one row before the flash point (row 60), although the flash point has a weight of 4, the weights only total 100 with it and the shell sheet adds it. The software adds it. Decided by the project owner (29 Nov 2026); to be confirmed by the client.",
+  "C2.10 'Flash Point': the weight in RBI_Calc!C60 is a link to another workbook file; the number Excel last saved there (4) is used.",
+  "Factor_Master holds other weights than RBI_Calc for 21 factors (C2.2, C2.4, C2.5, C2.7, C2.9, P1.7, P1.8, P2.1, P2.2, P2.3, P2.5, P2.6, P2.7, P2.8, P2.9, P2.10, P3.1, P3.2, P3.3, P3.4, P3.5). The weights of RBI_Calc are used (the client said Factor_Master is not filled in for this sheet).",
+  "P2.6 Wall ratio: RBI_Calc!D25 works out t_actual ÷ t_min, but its score table is headed t_min ÷ t_actual and the shell sheet takes t_min ÷ t_actual (as written, a thinner tube scores better). The software takes t_min ÷ t_actual. Decided by the project owner (29 Nov 2026); to be confirmed by the client.",
+  "Thickness override: Config!B7 is on and RBI_Calc!D99 / D100 say POF is 5 at or below t_min, but the D100 formula (=G92) leaves it out. The software sets POF to 5, as the shell sheet does. Decided by the project owner (29 Nov 2026); to be confirmed by the client.",
+  "Config: the inspection priority table has no column for POF category 5. The software uses the column of the shell sheet (COF 5 to 1: 1, 3, 5, 10, 12). Decided by the project owner (29 Nov 2026); to be confirmed by the client.",
+  "'Recommendation': 15 formulas contain #REF! (they point at a cell that no longer exists).",
+  "'RBI_Calc': 9 formulas contain #REF! (they point at a cell that no longer exists).",
+  "'DM -TUBE side' is not used by RBI_Calc: P1.8 and P2.1 are taken from 'DM -SHell'. In the software a mechanism's place (external = shell side, internal = tube side) comes from the damage-mechanism library."
+ ],
+ "version": "2bac975e719e"
+}

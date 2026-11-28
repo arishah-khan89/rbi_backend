@@ -330,7 +330,9 @@ def _read_factors(wf, wb) -> Tuple[List[dict], Dict[str, int], List[str]]:
     return out, {k: v for k, v in rows.items()}, issues
 
 
-def _read_config(wb, issues: List[str]) -> dict:
+def _read_config(wb, issues: List[str], priority_header: int = 45, choices: bool = True) -> dict:
+    """`priority_header`: the row of the inspection priority table's heading (the tube bundle workbook has it three rows lower).
+    `choices`: apply SETTING_CHOICES (they are about the shell sheet)."""
     ws = wb[CONFIG]
     for cell, text in (("A6", "normalise"), ("A7", "hard override"), ("A8", "fraction"), ("A9", "unlimited"),
                        ("A38", "failure frequency"), ("A39", "decades"), ("A40", "damage score"), ("A41", "inspection-effectiveness"), ("A42", "credible")):
@@ -341,7 +343,8 @@ def _read_config(wb, issues: List[str]) -> dict:
            "dm_anchor_frequency": _num(ws["B38"].value), "dm_decades_per_step": _num(ws["B39"].value),
            "dm_weight_damage": _num(ws["B40"].value), "dm_weight_inspection": _num(ws["B41"].value),
            "dm_credible_from": _num(ws["B42"].value)}
-    _apply_setting_choices(cfg, issues)
+    if choices:
+        _apply_setting_choices(cfg, issues)
     if cfg["dm_weight_damage"] + cfg["dm_weight_inspection"] != 100:
         raise RulesError(f"{CONFIG}: the weights of damage score and inspection effectiveness must total 100.")
     categories = [{"lower": _num(ws[f"A{r}"].value), "category": _num(ws[f"B{r}"].value),
@@ -360,9 +363,17 @@ def _read_config(wb, issues: List[str]) -> dict:
     used = {x for row in matrix.values() for x in row}
     if used - {l["label"] for l in levels}:
         raise RulesError(f"{CONFIG}: the matrix uses risk levels the policy table does not list: {sorted(used - {l['label'] for l in levels})}.")
-    if [ws.cell(45, c).value for c in range(2, 7)] != [1, 2, 3, 4, 5] or [ws[f"A{r}"].value for r in range(46, 51)] != [5, 4, 3, 2, 1]:
-        raise RulesError(f"{CONFIG}: the inspection priority table must have 5 to 1 down column A and 1 to 5 along row 45.")
-    priority = {str(ws[f"A{r}"].value): [_num(ws.cell(r, c).value) for c in range(2, 7)] for r in range(46, 51)}
+    h = priority_header
+    head = [ws.cell(h, c).value for c in range(2, 7)]
+    # the columns the table really has: an empty heading at the end means the sheet gives no priority for that category
+    have = len([x for x in head if x is not None])
+    if have < 4 or head[:have] != [1, 2, 3, 4, 5][:have] or [ws[f"A{r}"].value for r in range(h + 1, h + 6)] != [5, 4, 3, 2, 1]:
+        raise RulesError(f"{CONFIG}: the inspection priority table must have 5 to 1 down column A and 1 to 5 along row {h}.")
+    priority = {str(ws[f"A{r}"].value): [None if ws.cell(r, c).value is None else _num(ws.cell(r, c).value) for c in range(2, 7)]
+                for r in range(h + 1, h + 6)}
+    if have < 5:
+        issues.append(f"{CONFIG}: the inspection priority table (heading row {h}) stops at category {have}: there is no column for category "
+                      f"{have + 1}, so no inspection priority can be given there. The software shows none.")
     return {"settings": cfg, "categories": categories, "matrix": matrix, "levels": levels, "priority": priority}
 
 

@@ -53,9 +53,10 @@ def _run(fn, *args, **kwargs):
 
 
 @router.get("/form")
-def form_description():
-    """The workbook's inputs, factors, weights, matrix, priorities and known issues: what the screens need to draw the form."""
-    return crud.form_description()
+def form_description(model: str = Query("shell", pattern="^(shell|tube)$")):
+    """The workbook's inputs, factors, weights, matrix, priorities and known issues: what the screens need to draw the form.
+    `model`: "shell" (every component type but the tube bundle) or "tube" (the tube bundle workbook)."""
+    return crud.form_description(model)
 
 
 @router.get("/fluids")
@@ -66,8 +67,8 @@ def fluids(kind: str = Query("flammable", pattern="^(toxic|flammable)$"), q: Opt
 
 @router.get("/mechanisms")
 def mechanisms(location: Optional[str] = Query(None, pattern="^(Internal|External)$"), q: Optional[str] = Query(None),
-               db: Session = Depends(get_db)):
-    return crud.list_mechanisms(db, location, q)
+               model: str = Query("shell", pattern="^(shell|tube)$"), db: Session = Depends(get_db)):
+    return crud.list_mechanisms(db, location, q, model)
 
 
 @router.get("/equipment")

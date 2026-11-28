@@ -216,7 +216,7 @@ class Behaviour(unittest.TestCase):
         out = self.run_with(t_actual=10.0714)
         self.assertTrue(out["pof"]["override"])
         self.assertEqual((out["pof"]["score"], out["pof"]["category"]), (5, 5))
-        self.assertIn("Override", out["pof"]["driving_group"])
+        self.assertEqual(out["pof"]["driving_group"], "Wall at or below minimum")
         self.assertEqual(out["derived"]["remaining_life_internal"], 0)
 
     def test_an_uninsulated_item_cannot_get_the_cui_block(self):
@@ -305,7 +305,7 @@ class Behaviour(unittest.TestCase):
 
     def test_dates_are_checked_against_the_assessment_date_and_the_in_service_date(self):
         out = self.run_with(in_service_date=date(2030, 1, 1))
-        self.assertIn("The in-service date is after the assessment date.", out["checks"]["problems"])
+        self.assertIn("In-service date is after the assessment date.", out["checks"]["problems"])
         out = self.run_with(last_internal_inspection=date(1990, 1, 1))
         self.assertTrue(any("last internal inspection is before the in-service date" in w for w in out["checks"]["warnings"]))
         self.assertFalse(any("in-service date" in p for p in out["checks"]["problems"]))
@@ -404,7 +404,7 @@ class Behaviour(unittest.TestCase):
     def test_bad_inputs_are_reported(self):
         out = self.run_with(t_min=20, last_external_inspection=date(2100, 1, 1), internal_corrosion_rate=-1)
         text = " ".join(out["checks"]["problems"])
-        self.assertIn("cannot be more than the nominal", text)
+        self.assertIn("cannot exceed the nominal thickness", text)
         self.assertIn("after the assessment date", text)
         self.assertIn("cannot be negative", text)
         self.assertFalse(out["complete"])

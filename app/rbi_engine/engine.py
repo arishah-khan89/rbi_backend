@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 RULES_PATH = Path(__file__).with_name("rules.json")
+TUBE_RULES_PATH = Path(__file__).with_name("rules_tube.json")       # the client's tube bundle workbook (rules_builder_tube.py)
 _cache: Dict[str, Any] = {}
 Q9 = Decimal("0.000000001")
 
@@ -148,7 +149,8 @@ def _mechanism_rows(rules: dict, inputs: dict, derived: dict, library: Dict[str,
     s = rules["settings"]
     unlimited = Decimal(str(s["unlimited_life_years"]))
     f_by_id = {f["id"]: f for f in rules["factors"]}
-    life_table, eff_table = f_by_id["P1.11"]["table"], f_by_id["P2.9"]["table"]
+    life_table = f_by_id[rules.get("dm_life_factor", "P1.11")]["table"]           # the remaining-life table a rate-based mechanism is scored with
+    eff_table = f_by_id["P2.9"]["table"]
     allowance = derived.get("remaining_allowance")
     anchor, step = float(s["dm_anchor_frequency"]), float(s["dm_decades_per_step"])
     wd, wi = Decimal(str(s["dm_weight_damage"])), Decimal(str(s["dm_weight_inspection"]))
@@ -179,26 +181,26 @@ def _mechanism_rows(rules: dict, inputs: dict, derived: dict, library: Dict[str,
         if rate_based:
             damage = band(life_table, remaining) if remaining is not None else None
             if damage is None:
-                row["messages"].append("Needs a corrosion rate and the thicknesses to work out the remaining life.")
+                row["messages"].append("Corrosion rate and thicknesses are required.")
         else:
             damage = dec(raw.get("susceptibility"))
             if damage is None or not (1 <= damage <= 5):
                 damage = None
-                row["messages"].append("Needs a susceptibility from 1 to 5.")
+                row["messages"].append("Susceptibility is required (1 to 5).")
         row["damage_score"] = damage
         eff_text = raw.get("inspection_effectiveness")
         hit = exact(eff_table, eff_text) if not blank(eff_text) else None
         row["effectiveness"] = eff_text if hit else None
         row["effectiveness_score"] = Decimal(str(hit["score"])) if hit else Decimal(5)       # no inspection = ineffective (the sheet's rule)
         if blank(eff_text):
-            row["messages"].append("No inspection effectiveness chosen: counted as E (none).")
+            row["messages"].append("No inspection effectiveness selected: counted as E (none).")
         calc = ((wd * damage + wi * row["effectiveness_score"]) / (wd + wi)) if damage is not None else None
         row["calculated_score"] = calc
         suggested = dec(raw.get("suggested_score"))
         if suggested is not None and not (1 <= suggested <= 5):
             suggested = None
             row["suggested_invalid"] = True
-            row["messages"].append("A suggested score must be between 1 and 5.")
+            row["messages"].append("Suggested score must be from 1 to 5.")
         row["suggested_score"] = suggested
         row["justification"] = raw.get("justification")
         used = suggested if suggested is not None else calc
@@ -238,6 +240,11 @@ DERIVED_FROM = {
     "remaining_life_external": ["t_actual", "t_min", "external_corrosion_rate"],
     "remaining_life_internal": ["t_actual", "t_min", "internal_corrosion_rate"],
     "years_since_internal_inspection": ["assessment_date", "last_internal_inspection"],
+    # tube bundle (engine_tube.py)
+    "pressure_differential": ["tube_operating_pressure", "shell_operating_pressure"],
+    "design_pressure_ratio": ["tube_operating_pressure", "shell_operating_pressure", "tube_design_pressure", "shell_design_pressure"],
+    "wall_loss_pct": ["t_nominal", "t_actual"],
+    "plugged_pct": ["total_tubes", "plugged_tubes"],
 }
 
 
@@ -320,7 +327,7 @@ def _score_factor(rules: dict, f: dict, inputs: dict, derived: dict, fluids: dic
         conc = dec(fl.get("toxicity_concentration"))
         if conc is None:
             return _res(None, "invalid", "The fluid list has no toxicity concentration for this fluid.")
-        if conc == 0:
+        if conc == 0 and f.get("zero_is_zero", True):               # the tube bundle sheet has no "0 scores 0" case: its table decides
             return _res(Decimal(0), "scored")
         s = band(f["table"], conc)
         return _res(s, "scored") if s is not None else _res(None, "invalid", "The concentration is below the first row of the table.")
@@ -361,6 +368,58 @@ def _score_factor(rules: dict, f: dict, inputs: dict, derived: dict, fluids: dic
     if kind == "dm":
         return _res(dm["external" if f["location"] == "External" else "internal"], "scored")
     raise ValueError(f"unknown factor kind {kind}")
+
+
+# ------------------------------------------------------------------------------------------------ planning and advice (both models)
+def recommended_interval(settings: dict, policy_years: Decimal, life: Optional[Decimal]) -> Optional[Decimal]:
+    """The policy interval, or the fraction of the remaining life when that is shorter."""
+    if life is None:
+        return None
+    unlimited, fraction = Decimal(str(settings["unlimited_life_years"])), Decimal(str(settings["interval_fraction"]))
+    return round_half_up(policy_years if life >= unlimited else min(policy_years, fraction * life), 1)
+
+
+def due_info(rules: dict, assess: Optional[date], last_raw: Any, years: Optional[Decimal]) -> dict:
+    last = to_date(last_raw)
+    if last is None:
+        return {"last": None, "due": None, "status": "INSPECT NOW", "label": "Not inspected – inspect now"}
+    if years is None or assess is None:
+        return {"last": last, "due": None, "status": None, "label": None}
+    days = int(round_half_up(years * Decimal("365.25"), 0))
+    d = last + timedelta(days=days)
+    status = "OVERDUE" if d < assess else "Due within 6 months" if (d - assess).days <= rules["shape"]["due_window_days"] else "OK"
+    return {"last": last, "due": d, "status": status, "label": None}
+
+
+def nde_advice(rules: dict, mech: List[dict], policy: dict) -> None:
+    """NDE recommendation per mechanism (DM_Register column S): upgrade or maintain, against the effectiveness the risk level asks for."""
+    eff_table = next(f for f in rules["factors"] if f["id"] == "P2.9")["table"]
+    need = exact(eff_table, policy["min_effectiveness"])
+    need_score = Decimal(str(need["score"])) if need else None
+    need_letter = (policy["min_effectiveness"] or "")[:1]
+    for m in mech:
+        if m["status"] == "invalid" or m.get("score_used") is None:
+            m["recommendation"] = None
+            continue
+        letter = (m["effectiveness"] or "none")[:1] if m["effectiveness"] else "none"
+        upgrade = need_score is not None and m["effectiveness_score"] > need_score
+        m["upgrade"] = upgrade
+        m["recommendation"] = (f"UPGRADE – use {m.get('primary_nde')} (current effectiveness {letter} is below required {need_letter}); "
+                               f"add {m.get('secondary_nde')} as complementary method") if upgrade else \
+            f"MAINTAIN – {m.get('primary_nde')} at the policy interval; complementary: {m.get('secondary_nde')}"
+
+
+def mechanism_summary(settings: dict, mech: List[dict], dm: dict) -> dict:
+    scored_rows = [m for m in mech if m.get("score_used") is not None]
+    return {
+        "entered": len(mech), "credible": sum(1 for m in scored_rows if m["score_used"] >= Decimal(str(settings["dm_credible_from"]))),
+        "internal_score": dm["internal"], "external_score": dm["external"],
+        "governing": (max(scored_rows, key=lambda m: m["score_used"])["name"] if scored_rows else None),
+        "highest_score": max((m["score_used"] for m in scored_rows), default=Decimal(1)),
+        "needing_upgrade": sum(1 for m in mech if m.get("upgrade")),
+        "overrides_below_calculated": sum(1 for m in mech if (m.get("flag") or "").startswith("Override")),
+        "rows_with_missing_inputs": sum(1 for m in mech if m["status"] == "missing"),
+    }
 
 
 # ------------------------------------------------------------------------------------------------ the whole analysis
@@ -416,7 +475,7 @@ def evaluate(rules: Dict[str, Any], inputs: Dict[str, Any], fluids: Optional[Dic
     live = [g for g in ("PE", "PI") if active[g]]
     pof = Decimal(5) if override else max((groups[g] for g in live), default=Decimal(0))
     if override:
-        pof_group = "Override: wall at / below t_min"
+        pof_group = "Wall at or below minimum"
     elif not live:
         pof_group = "—"
     else:
@@ -429,87 +488,44 @@ def evaluate(rules: Dict[str, Any], inputs: Dict[str, Any], fluids: Optional[Dic
     priority = rules["priority"][str(prio_row)][prio_col - 1]
 
     # inspection planning (step 10)
-    unlimited, fraction = Decimal(str(s["unlimited_life_years"])), Decimal(str(s["interval_fraction"]))
     policy_years = Decimal(str(policy["max_interval_years"]))
-
-    def interval(life: Optional[Decimal]) -> Optional[Decimal]:
-        if life is None:
-            return None
-        return round_half_up(policy_years if life >= unlimited else min(policy_years, fraction * life), 1)
-
     assess = to_date(inputs.get("assessment_date"))
-
-    def due(last_key: str, years: Optional[Decimal]) -> dict:
-        last = to_date(inputs.get(last_key))
-        if last is None:
-            return {"last": None, "due": None, "status": "INSPECT NOW", "label": "Not inspected – inspect now"}
-        if years is None or assess is None:
-            return {"last": last, "due": None, "status": None, "label": None}
-        days = int(round_half_up(years * Decimal("365.25"), 0))
-        d = last + timedelta(days=days)
-        status = "OVERDUE" if d < assess else "Due within 6 months" if (d - assess).days <= rules["shape"]["due_window_days"] else "OK"
-        return {"last": last, "due": d, "status": status, "label": None}
-
-    int_years, ext_years = interval(derived["remaining_life_internal"]), interval(derived["remaining_life_external"])
+    int_years = recommended_interval(s, policy_years, derived["remaining_life_internal"])
+    ext_years = recommended_interval(s, policy_years, derived["remaining_life_external"])
     planning = {"policy_interval_years": policy_years, "internal_interval_years": int_years, "external_interval_years": ext_years,
-                "internal": due("last_internal_inspection", int_years), "external": due("last_external_inspection", ext_years),
+                "internal": due_info(rules, assess, inputs.get("last_internal_inspection"), int_years),
+                "external": due_info(rules, assess, inputs.get("last_external_inspection"), ext_years),
                 "required_action": policy["action"], "minimum_effectiveness": policy["min_effectiveness"]}
 
-    # NDE recommendation per mechanism (DM_Register column S)
-    eff_table = next(f for f in rules["factors"] if f["id"] == "P2.9")["table"]
-    need = exact(eff_table, policy["min_effectiveness"])
-    need_score = Decimal(str(need["score"])) if need else None
-    need_letter = (policy["min_effectiveness"] or "")[:1]
-    for m in mech:
-        if m.get("score_used") is None and m["status"] != "invalid":
-            m["recommendation"] = None
-            continue
-        if m["status"] == "invalid":
-            m["recommendation"] = None
-            continue
-        letter = (m["effectiveness"] or "none")[:1] if m["effectiveness"] else "none"
-        upgrade = need_score is not None and m["effectiveness_score"] > need_score
-        m["upgrade"] = upgrade
-        m["recommendation"] = (f"UPGRADE – use {m.get('primary_nde')} (current effectiveness {letter} is below required {need_letter}); "
-                               f"add {m.get('secondary_nde')} as complementary method") if upgrade else \
-            f"MAINTAIN – {m.get('primary_nde')} at the policy interval; complementary: {m.get('secondary_nde')}"
-    scored_rows = [m for m in mech if m.get("score_used") is not None]
-    dm_summary = {
-        "entered": len(mech), "credible": sum(1 for m in scored_rows if m["score_used"] >= Decimal(str(s["dm_credible_from"]))),
-        "internal_score": dm["internal"], "external_score": dm["external"],
-        "governing": (max(scored_rows, key=lambda m: m["score_used"])["name"] if scored_rows else None),
-        "highest_score": max((m["score_used"] for m in scored_rows), default=Decimal(1)),
-        "needing_upgrade": sum(1 for m in mech if m.get("upgrade")),
-        "overrides_below_calculated": sum(1 for m in mech if (m.get("flag") or "").startswith("Override")),
-        "rows_with_missing_inputs": sum(1 for m in mech if m["status"] == "missing"),
-    }
+    nde_advice(rules, mech, policy)
+    dm_summary = mechanism_summary(s, mech, dm)
 
     # validation (step 11)
     problems = []
     if t_act is None or t_act <= 0:
-        problems.append("The latest measured thickness (t_actual) must be more than 0.")
+        problems.append("Latest measured thickness must be more than 0.")
     if t_min is None or t_min <= 0:
-        problems.append("The required minimum thickness (t_min) must be more than 0.")
+        problems.append("Required minimum thickness must be more than 0.")
     t_nom = dec(inputs.get("t_nominal"))
     if t_min is not None and t_nom is not None and t_min > t_nom:
-        problems.append("t_min cannot be more than the nominal thickness.")
+        problems.append("Required minimum thickness cannot exceed the nominal thickness.")
     for key, label in (("external_corrosion_rate", "external corrosion rate"), ("internal_corrosion_rate", "internal corrosion rate")):
         v = dec(inputs.get(key))
         if v is not None and v < 0:
-            problems.append(f"The {label} cannot be negative.")
+            problems.append(f"{label.capitalize()} cannot be negative.")
     in_service = to_date(inputs.get("in_service_date"))
     if in_service is not None and assess is not None and in_service > assess:
-        problems.append("The in-service date is after the assessment date.")                      # Algorithm step 11: dates <= assessment date
+        problems.append("In-service date is after the assessment date.")                      # Algorithm step 11: dates <= assessment date
     inspection_before_service = []
     for key, label in (("last_internal_inspection", "last internal inspection"), ("last_external_inspection", "last external inspection")):
         d = to_date(inputs.get(key))
         if d is not None and assess is not None and d > assess:
-            problems.append(f"The date of the {label} is after the assessment date.")
+            problems.append(f"{label.capitalize()} date is after the assessment date.")
         elif d is not None and in_service is not None and d < in_service:
             inspection_before_service.append(label)
     for m in mech:
         if m.get("suggested_invalid"):                                   # it is not silently ignored: the analysis is not complete until it is corrected or removed
-            problems.append(f"{m['name']}: the score you give must be a number from 1 to 5.")
+            problems.append(f"{m['name']}: suggested score must be from 1 to 5.")
     group_weights = {g: sum((x["weight"] for x in factors if x["group"] == g), Decimal(0)) for g in groups}
     weights_ok = all(w == 100 for w in group_weights.values())
     # With "Insulated? = No" the corrosion-under-insulation sub-group is multiplied by 0 (RBI_Calc D59): its answers are not needed.
@@ -518,7 +534,7 @@ def evaluate(rules: Dict[str, Any], inputs: Dict[str, Any], fluids: Optional[Dic
                and x["applicable"]]
     warnings = [f"The date of the {label} is before the in-service date: please check it." for label in inspection_before_service]
     if sides_by_mechanism and not live:
-        problems.append("Add at least one damage mechanism (internal or external): only the questions of the damage mechanisms you add are asked.")
+        problems.append("Add at least one damage mechanism (internal or external).")
     elif not mech:
         warnings.append("No damage mechanism has been entered: the damage-mechanism factors are scored 1 (the lowest).")
     for m in mech:

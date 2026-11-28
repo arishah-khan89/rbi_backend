@@ -708,5 +708,161 @@ class TheWholePlant(Base_):
         self.assertEqual(priorities, sorted(priorities))
 
 
+def make_exchanger(tag):
+    """A heat exchanger: the vessel of make_vessel with the register's tube side filled in and tube / channel thickness locations."""
+    eid = make_vessel(tag)
+    db = Session()
+    eq = db.query(Equipment).filter(Equipment.id == uuid.UUID(eid)).first()
+    eq.design_pressure, eq.tube_operating_pressure, eq.tube_design_pressure = Decimal("16"), Decimal("35"), Decimal("45")
+    eq.tube_operating_temperature, eq.tube_thickness, eq.tube_min_thickness, eq.no_of_tubes = Decimal("40"), Decimal("2.11"), Decimal("1"), 400
+    for code, kind, thickness in (("T-1", "Tube", "1.88"), ("CH-1", "Channel Head", "11")):
+        tml = InspectionTML(equipment_id=eq.id, equipment_tag=tag, tml_code=code, tml_name=code, tml_type=kind)
+        db.add(tml)
+        db.flush()
+        db.add(InspectionReading(tml_id=tml.id, inspection_date=datetime(2024, 1, 1, tzinfo=timezone.utc), reading_1=Decimal(thickness),
+                                 controlling_cr=Decimal("0.2")))
+    db.commit()
+    db.close()
+    return eid
+
+
+def finalized_as_shell(a):
+    """A stored result as the software made it before the tube bundle workbook: worked out with the shell rules, with no "model"."""
+    from app.rbi_engine.engine import evaluate, jsonable
+    result = jsonable(evaluate(load_rules(), {"assessment_date": a.assessment_date.isoformat()}))
+    facts = {"tml_count": 0, "t_actual": None, "t_min": None, "governing_location": None, "last_reading_date": None, "controlling_cr": None,
+             "short_cr": None, "long_cr": None, "notes": []}
+    return {"result": result, "effective_inputs": {}, "sources": {}, "facts": facts}
+
+
+TUBE_MECHANISMS = [{"name": "CO2 corrosion", "inspection_effectiveness": "B – Usually effective"},
+                   {"name": "Atmospheric corrosion", "rate": 0.05, "susceptibility": 3, "inspection_effectiveness": "C – Fairly effective"}]
+
+
+class TubeBundleAndChannel(Base_):
+    """The tube bundle has its own workbook; Channel works exactly as Shell."""
+
+    def exchanger_component(self, tag, kind):
+        eid = make_exchanger(tag)
+        r = self.client.post(f"{API}/equipment/{eid}/components", json={"name": f"{tag}-X", "component_type": kind}, headers=self.h("eng"))
+        self.assertEqual(r.status_code, 201, r.text)
+        cid = r.json()["component"]["id"]
+        d = self.client.post(f"{API}/components/{cid}/assessments", headers=self.h("eng"))
+        self.assertEqual(d.status_code, 201, d.text)
+        return eid, cid, d.json()
+
+    def tube_form(self):
+        r = self.client.get(f"{API}/form", params={"model": "tube"}, headers=self.h("view"))
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()
+
+    def tube_answers(self, draft):
+        """The draft's own prefilled answers plus every other question of the tube form."""
+        answers = dict(draft["inputs"])
+        answers.update({"design_life_years": 25, "in_service_date": "2020-05-01", "plugged_tubes": 12, "last_internal_inspection": "2026-06-15",
+                        "downtime_days": 10, "inventory_kg": 20000, "cost_per_kg": 90, "repair_cost": 300000, "toxic_percentage": 10,
+                        "detection_time": 45, "isolation_time": 45, "ignition_distance": 15, "operating_temperature": 40, "workforce_persons": 7,
+                        "internal_inspections": 2, "toxic_fluid": "Furfural", "representative_fluid": "EE",
+                        # mechanisms of the tube sheet's own list; it has no external corrosion rate, so the external one carries its own
+                        "mechanisms": TUBE_MECHANISMS})
+        for i in self.tube_form()["inputs"]:
+            if i["kind"] in ("select", "yesno") and "options" in i:
+                answers[i["key"]] = i["options"][0]
+        answers["internal_corrosion_rate_kind"] = "Controlling"
+        return answers
+
+    def test_the_types_and_the_two_forms(self):
+        eid = make_vessel("V-TB-0")
+        types = self.client.get(f"{API}/equipment/{eid}", headers=self.h("view")).json()["component_types"]
+        self.assertEqual(types, ["Shell", "Channel", "Head / Dish", "Tube bundle", "Roof", "Bottom", "Other"])
+        shell = self.client.get(f"{API}/form", headers=self.h("view")).json()
+        tube = self.tube_form()
+        self.assertEqual((shell["model"], len(shell["factors"])), ("shell", 39))
+        self.assertEqual((tube["model"], len(tube["factors"])), ("tube", 36))
+        self.assertEqual(sorted({f["group"] for f in tube["factors"]}), ["C1", "C2", "C3", "C4", "PT"])
+        self.assertNotIn("insulated", [i["key"] for i in tube["inputs"]])
+        self.assertEqual(self.client.get(f"{API}/form", params={"model": "x"}, headers=self.h("view")).status_code, 422)
+
+    def test_a_channel_is_assessed_like_a_shell_with_its_own_thickness_locations(self):
+        eid, cid, d = self.exchanger_component("V-TB-1", "Channel")
+        self.assertEqual(d["model"], "shell")
+        self.assertEqual({f["group"] for f in d["result"]["factors"]}, {"C1", "C2", "C3", "PE", "PI"})
+        self.assertEqual((d["facts"]["tml_count"], d["facts"]["governing_location"]), (1, "CH-1"))
+        for shell_side in ("operating_pressure", "operating_temperature", "representative_fluid", "t_nominal"):
+            self.assertNotIn(shell_side, d["inputs"])
+
+    @unittest.skipUnless(HAVE_SHEET, "the client's workbook is not next to the project")
+    def test_the_tube_bundle_offers_only_the_mechanisms_of_its_sheet(self):
+        every = self.client.get(f"{API}/mechanisms", headers=self.h("view")).json()
+        tube = self.client.get(f"{API}/mechanisms", params={"model": "tube"}, headers=self.h("view")).json()
+        self.assertEqual((len(every), len(tube), sum(m["location"] == "External" for m in tube)), (96, 33, 4))
+        eid, cid, d = self.exchanger_component("V-TB-5", "Tube bundle")
+        r = self.client.put(f"{API}/assessments/{d['id']}", json={"inputs": {"mechanisms": [{"name": "External corrosion"}]}}, headers=self.h("eng"))
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("tube bundle mechanism list", r.json()["detail"])
+        db = Session()
+        old = db.query(RbiAssessment).filter(RbiAssessment.id == uuid.UUID(d["id"])).first()
+        old.inputs = {"mechanisms": [{"name": "External corrosion"}, {"name": "CO2 corrosion"}]}      # as a draft made before could hold
+        db.commit()
+        db.close()
+        seen = self.client.get(f"{API}/assessments/{d['id']}", headers=self.h("view")).json()
+        self.assertEqual([m["name"] for m in seen["inputs"]["mechanisms"]], ["CO2 corrosion"])
+        self.assertTrue(any("Mechanisms removed" in n and "External corrosion" in n for n in seen["result"]["notes"]), seen["result"]["notes"])
+
+    @unittest.skipUnless(HAVE_SHEET, "the client's workbook is not next to the project")
+    def test_a_tube_bundle_starts_from_the_register_and_is_finalized_approved_and_reflected(self):
+        eid, cid, d = self.exchanger_component("V-TB-2", "Tube bundle")
+        self.assertEqual(d["model"], "tube")
+        keys = ("tube_operating_pressure", "tube_design_pressure", "shell_operating_pressure", "shell_design_pressure", "total_tubes", "t_nominal")
+        self.assertEqual([d["inputs"].get(k) for k in keys], [35, 45, 12.5, 16, 400, 2.11])
+        self.assertEqual(d["facts"]["t_actual"], 1.88)
+        put = self.client.put(f"{API}/assessments/{d['id']}", json={"inputs": self.tube_answers(d), "task_plan": {"internal": {"action": "new"}}},
+                              headers=self.h("eng"))
+        self.assertEqual(put.status_code, 200, put.text)
+        saved = put.json()
+        self.assertTrue(saved["result"]["complete"], saved["result"]["checks"])
+        self.assertEqual(sorted(saved["result"]["groups"]), ["C1", "C2", "C3", "C4", "PT"])
+        self.assertEqual(saved["effective_inputs"]["operating_pressure"], 35)                  # linked to the tube-side pressure
+        self.assertNotIn("operating_pressure", saved["inputs"])
+        own = self.client.post(f"{API}/assessments/{d['id']}/preview", json={"inputs": {**saved["inputs"], "operating_pressure": 6}},
+                               headers=self.h("eng")).json()
+        self.assertEqual((own["effective_inputs"]["operating_pressure"], own["inputs"]["operating_pressure"]), (6, 6))
+        fin = self.client.post(f"{API}/assessments/{d['id']}/finalize", json={"approver": "adm"}, headers=self.h("eng"))
+        self.assertEqual(fin.status_code, 200, fin.text)
+        ok = self.client.post(f"{API}/assessments/{d['id']}/approve", headers=self.h("adm"))
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertEqual((ok.json()["model"], ok.json()["state"]), ("tube", "approved"))
+        tasks = self.client.get("/api/v1/inspection-tasks", params={"equipment_id": eid}, headers=self.h("view")).json()["data"]
+        self.assertEqual([t["task_type"] for t in tasks], ["Internal"])
+        again = self.client.post(f"{API}/components/{cid}/assessments", headers=self.h("eng"))
+        self.assertEqual(again.status_code, 201, again.text)
+        self.assertEqual((again.json()["revision"], again.json()["model"], again.json()["inputs"]["plugged_tubes"]), (2, "tube", 12))
+
+    def test_a_wrong_tube_answer_is_refused_or_reported(self):
+        eid, cid, d = self.exchanger_component("V-TB-3", "Tube bundle")
+        r = self.client.put(f"{API}/assessments/{d['id']}", json={"inputs": {"total_tubes": 4.5}}, headers=self.h("eng"))
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post(f"{API}/assessments/{d['id']}/finalize", json={"approver": "adm"}, headers=self.h("eng"))
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("not complete", r.json()["detail"])
+
+    def test_a_tube_bundle_assessed_before_with_the_shell_questions_keeps_that_record(self):
+        eid, cid, d = self.exchanger_component("V-TB-4", "Tube bundle")
+        db = Session()
+        old = db.query(RbiAssessment).filter(RbiAssessment.id == uuid.UUID(d["id"])).first()
+        old.results, old.state = finalized_as_shell(old), "approved"
+        old.inputs = {"reputation": "not a tube choice", "downtime_days": 7, "mechanisms": []}
+        db.commit()
+        db.close()
+        kept = self.client.get(f"{API}/assessments/{d['id']}", headers=self.h("view")).json()
+        self.assertEqual(kept["model"], "shell")
+        self.assertIn("PE", kept["result"]["groups"])
+        new = self.client.post(f"{API}/components/{cid}/assessments", headers=self.h("eng"))
+        self.assertEqual(new.status_code, 201, new.text)
+        n = new.json()
+        self.assertEqual((n["model"], n["inputs"]["downtime_days"], n["inputs"]["total_tubes"]), ("tube", 7, 400))
+        self.assertNotIn("reputation", n["inputs"])            # a choice the tube sheet does not have is not carried over
+
+
 if __name__ == "__main__":
     unittest.main()

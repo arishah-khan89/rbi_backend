@@ -1,4 +1,6 @@
-"""Risk assessment (RBI) of the components of an equipment, after the client's workbook (030-E-11- Shell.xlsx).
+"""Risk assessment (RBI) of the components of an equipment, after the client's workbooks: "030-E-11- Shell.xlsx" for every component type
+except the tube bundle, which has its own workbook ("RBI Logics -Tube Bundles.xlsx": other questions, weights and groups). The client
+asked (26 Nov 2026) for Channel to work exactly as Shell.
 
   Equipment -> Component (Shell, Head, Tube bundle ...) -> Assessment (revision 1, 2 ...)
   An assessment goes  draft -> finalized (risk completed, waits for an admin) -> approved (locked); an admin can send a finalized one
@@ -29,10 +31,13 @@ from app.crud.cml import min_t_for_type
 from app.models.cml import InspectionReading, InspectionTML
 from app.models.equipment import Equipment
 from app.models.rbi_assessment import RbiAssessment, RbiComponent, RbiFluidEntry, RbiMechanismEntry
-from app.rbi_engine.engine import blank, dec, evaluate, exact, jsonable, load_rules, norm, to_date
+from app.rbi_engine import engine_tube
+from app.rbi_engine.engine import TUBE_RULES_PATH, blank, dec, evaluate, exact, jsonable, load_rules, norm, to_date
 
-COMPONENT_TYPES = ["Shell", "Head / Dish", "Tube bundle", "Roof", "Bottom", "Other"]
-_GROUP = {"Shell": "shell", "Head / Dish": "head", "Tube bundle": "tube", "Roof": "roof", "Bottom": "bottom"}
+COMPONENT_TYPES = ["Shell", "Channel", "Head / Dish", "Tube bundle", "Roof", "Bottom", "Other"]
+_GROUP = {"Shell": "shell", "Channel": "channel", "Head / Dish": "head", "Tube bundle": "tube", "Roof": "roof", "Bottom": "bottom"}
+_CHANNEL = ("channel", "channel head")          # the thickness locations of a Channel (a "Channel Head" also still counts for Head / Dish, as before)
+MODELS = ("shell", "tube")                       # which of the client's workbooks an assessment is worked out with
 _HEAD = ("dish", "head", "channel head", "dish / head")
 _TUBE = ("tube", "tubes", "tube bundle")
 _ROOF = ("roof", "fixed roof", "floating roof", "tank roof")
@@ -48,9 +53,25 @@ RATE_KINDS_FROM_INSPECTION = ("controlling", "short term", "long term")
 SIDES_BY_MECHANISM = True
 
 # inputs that cannot be negative / must be whole numbers (the workbook's own data validation says "decimal >= 0" for these)
-_NEGATIVE_OK = {"operating_temperature", "operating_pressure", "cui_temperature"}
-_WHOLE = {"external_inspections", "internal_inspections"}
+_NEGATIVE_OK = {"operating_temperature", "operating_pressure", "cui_temperature", "tube_operating_pressure", "shell_operating_pressure"}
+_WHOLE = {"external_inspections", "internal_inspections", "total_tubes", "plugged_tubes"}
 _NOT_FROM_THE_PERSON = {"assessment_date"}                       # handled on its own
+
+
+def model_of_type(component_type: Optional[str]) -> str:
+    return "tube" if component_type == "Tube bundle" else "shell"
+
+
+def rules_of(model: str) -> dict:
+    return load_rules(TUBE_RULES_PATH) if model == "tube" else load_rules()
+
+
+def _model_of(a: RbiAssessment, comp: RbiComponent) -> str:
+    """A finalized assessment keeps the rules it was worked out with (one finalized before the tube bundle workbook stays a shell one);
+    a draft follows the type of its component."""
+    if a.state != "draft" and a.results:
+        return (a.results.get("result") or {}).get("model") or "shell"
+    return model_of_type(comp.component_type)
 
 
 def _group_of(tml_type: Optional[str]) -> Optional[str]:
@@ -106,7 +127,11 @@ def load_facts(db: Session, eq: Equipment, component_type: str) -> Facts:
     group = _GROUP.get(component_type)
     if group is None:
         return facts
-    tmls = [t for t in db.query(InspectionTML).filter(InspectionTML.equipment_id == eq.id).all() if _group_of(t.tml_type) == group]
+    every = db.query(InspectionTML).filter(InspectionTML.equipment_id == eq.id).all()
+    if group == "channel":
+        tmls = [t for t in every if (t.tml_type or "").strip().lower() in _CHANNEL]
+    else:
+        tmls = [t for t in every if _group_of(t.tml_type) == group]
     facts.tml_count = len(tmls)
     if not tmls:
         return facts
@@ -141,7 +166,7 @@ def load_facts(db: Session, eq: Equipment, component_type: str) -> Facts:
         facts.t_actual, facts.t_min, facts.governing_tml = best[1], best[2], best[3]
     elif thinnest is not None:
         facts.t_actual = thinnest
-        facts.notes.append("The equipment register has no minimum required thickness for this kind of component.")
+        facts.notes.append("No minimum required thickness in the equipment register for this component type.")
     return facts
 
 
@@ -174,19 +199,38 @@ def suggested_inputs(db: Session, eq: Equipment, comp: RbiComponent) -> Dict[str
     nominal = _nominal(eq, comp.component_type)
     if nominal is not None:
         out["t_nominal"] = float(nominal)
-    tube = comp.component_type == "Tube bundle"
-    temperature = eq.tube_operating_temperature if tube else eq.operating_temperature
-    pressure = eq.tube_operating_pressure if tube else eq.operating_pressure
-    if temperature is not None:
-        out["operating_temperature"] = float(temperature)
-    if pressure is not None:
-        out["operating_pressure"] = float(pressure)
+    if comp.component_type == "Tube bundle":
+        return {**out, **_tube_suggestions(db, eq)}
+    if comp.component_type == "Channel":
+        return out              # the register's temperature, pressure and fluid are the shell side's: they are not taken for the channel
+    if eq.operating_temperature is not None:
+        out["operating_temperature"] = float(eq.operating_temperature)
+    if eq.operating_pressure is not None:
+        out["operating_pressure"] = float(eq.operating_pressure)
     ins = (eq.has_insulation or "").strip().lower()
     if ins in ("yes", "no"):
         out["insulated"] = ins.capitalize()
     for k, v in _fluid_names(db, eq.fluid).items():
         if v:
             out[k] = v
+    return out
+
+
+def _tube_suggestions(db: Session, eq: Equipment) -> Dict[str, Any]:
+    """The tube bundle sheet marks these "Equipment Register": the pressures of both sides, the number of tubes and the tube t_min. The
+    register's main pressure and fluid are the shell side's, its "tube" fields the tube side's. A pressure kept in another unit than
+    bar is not taken (the sheet is in barg)."""
+    out: Dict[str, Any] = {}
+    in_bar = (eq.pressure_unit or "bar").strip().lower() in ("bar", "barg")
+    values = {"shell_operating_pressure": eq.operating_pressure if in_bar else None, "shell_design_pressure": eq.design_pressure if in_bar else None,
+              "tube_operating_pressure": eq.tube_operating_pressure if in_bar else None,
+              "tube_design_pressure": eq.tube_design_pressure if in_bar else None,
+              "operating_temperature": eq.tube_operating_temperature, "t_min": eq.tube_min_thickness}
+    for key, value in values.items():
+        if value is not None:
+            out[key] = float(value)
+    if eq.no_of_tubes:
+        out["total_tubes"] = int(eq.no_of_tubes)
     return out
 
 
@@ -261,6 +305,32 @@ def clean_inputs(db: Session, rules: dict, raw: Dict[str, Any]) -> Dict[str, Any
     return out
 
 
+def fit_inputs(db: Session, rules: dict, raw: Dict[str, Any]) -> Dict[str, Any]:
+    """The answers of `raw` that `rules` can take; the others are left out (used when an earlier assessment was made with other rules,
+    e.g. a tube bundle assessed with the shell questions: its choices are not the tube sheet's)."""
+    out: Dict[str, Any] = {}
+    for key, value in (raw or {}).items():
+        if key == "mechanisms":
+            continue
+        try:
+            out.update({k: v for k, v in clean_inputs(db, rules, {key: value}).items() if k != "mechanisms"})
+        except ValueError:
+            continue
+    out["mechanisms"] = []
+    for row in (raw or {}).get("mechanisms") or []:
+        try:
+            out["mechanisms"] += _clean_mechanisms(db, rules, [row])
+        except ValueError:
+            continue
+    return out
+
+
+def _offered(rules: dict, name: str) -> bool:
+    """Whether these rules offer the mechanism: the tube bundle sheet has its own list, the shell takes the whole library."""
+    names = rules.get("mechanism_names")
+    return names is None or norm(name) in {norm(n) for n in names}
+
+
 def _clean_mechanisms(db: Session, rules: dict, rows: Any) -> List[dict]:
     if rows in (None, ""):
         return []
@@ -277,6 +347,8 @@ def _clean_mechanisms(db: Session, rules: dict, rows: Any) -> List[dict]:
         entry = db.query(RbiMechanismEntry).filter(func.lower(RbiMechanismEntry.name) == str(name).strip().lower()).first()
         if entry is None:
             raise ValueError(f"Damage mechanism {i}: '{name}' is not in the damage-mechanism library.")
+        if not _offered(rules, entry.name):
+            raise ValueError(f"Damage mechanism {i}: '{entry.name}' is not in the tube bundle mechanism list.")
         if entry.name.lower() in seen:
             raise ValueError(f"The damage mechanism '{entry.name}' is entered twice.")
         seen.add(entry.name.lower())
@@ -328,17 +400,19 @@ def _fluid_row(db: Session, key: str, value: Any) -> Optional[dict]:
 
 
 def linked_inputs(rules: dict) -> Dict[str, str]:
-    """{input: the input whose value it takes}: the workbook writes the link in the unit of an input ("°C (linked to C2.8)": C2.8 is the factor of the operating temperature)."""
+    """{input: the input whose value it takes}: the shell workbook writes the link in the unit of an input ("°C (linked to C2.8)": C2.8 is the
+    factor of the operating temperature); the tube bundle rules list theirs under "linked" (the sheet links them with a formula)."""
     first_input = {f["id"]: f["inputs"][0] for f in rules["factors"] if f.get("inputs")}
     out: Dict[str, str] = {}
     for i in rules["inputs"]:
         m = re.search(r"linked to ([CP]\d+\.\d+)", i.get("unit") or "")
         if m and m.group(1) in first_input:
             out[i["key"]] = first_input[m.group(1)]
+    out.update(rules.get("linked") or {})
     return out
 
 
-def effective_inputs(inputs: Dict[str, Any], facts: Facts, assessment_date: date) -> tuple:
+def effective_inputs(inputs: Dict[str, Any], facts: Facts, assessment_date: date, rules: Optional[dict] = None) -> tuple:
     """(inputs used for the score, where each number came from). The software's own value wins for the thicknesses (inspection data /
     equipment register) and for an internal corrosion rate chosen as controlling, short term or long term."""
     eff = dict(inputs)
@@ -354,7 +428,7 @@ def effective_inputs(inputs: Dict[str, Any], facts: Facts, assessment_date: date
         eff["internal_corrosion_rate"], source["internal_corrosion_rate"] = float(rate), "inspection data"
     source["assessment_date"] = "person"
     # an input the workbook links to another ("°C (linked to C2.8)", Factor_Master "same value as C2.8") takes that value until the person types their own
-    for key, other in linked_inputs(load_rules()).items():
+    for key, other in linked_inputs(rules or load_rules()).items():
         if blank(inputs.get(key)) and not blank(inputs.get(other)):
             eff[key] = inputs[other]
     return eff, source
@@ -369,13 +443,17 @@ def with_component_defaults(comp: RbiComponent, inputs: Dict[str, Any]) -> Dict[
 
 
 def analyse(db: Session, eq: Equipment, comp: RbiComponent, inputs: Dict[str, Any], assessment_date: date) -> dict:
-    rules = load_rules()
+    model = model_of_type(comp.component_type)
+    rules = rules_of(model)
     inputs = with_component_defaults(comp, inputs)
     facts = load_facts(db, eq, comp.component_type)
-    eff, source = effective_inputs(inputs, facts, assessment_date)
+    eff, source = effective_inputs(inputs, facts, assessment_date, rules)
     fluids = {"toxic": _fluid_row(db, "toxic_fluid", eff.get("toxic_fluid")), "flammable": _fluid_row(db, "representative_fluid", eff.get("representative_fluid"))}
     names = [m["name"] for m in (eff.get("mechanisms") or []) if m.get("name")]
-    result = evaluate(rules, eff, fluids, _library(db, names), sides_by_mechanism=SIDES_BY_MECHANISM)
+    if model == "tube":                          # the tube sheet has one probability score: every question is always asked and counted
+        result = engine_tube.evaluate(rules, eff, fluids, _library(db, names))
+    else:
+        result = evaluate(rules, eff, fluids, _library(db, names), sides_by_mechanism=SIDES_BY_MECHANISM)
     return {"result": jsonable(result), "effective_inputs": eff, "sources": source, "facts": _facts_view(facts)}
 
 
@@ -530,7 +608,7 @@ def _suggested_components(db: Session, eq: Equipment, existing: List[RbiComponen
 
 
 def _abbr(component_type: str) -> str:
-    return {"Shell": "SH", "Head / Dish": "HD", "Tube bundle": "TB", "Roof": "RF", "Bottom": "BT", "Other": "OT"}.get(component_type, "CP")
+    return {"Shell": "SH", "Channel": "CH", "Head / Dish": "HD", "Tube bundle": "TB", "Roof": "RF", "Bottom": "BT", "Other": "OT"}.get(component_type, "CP")
 
 
 # ------------------------------------------------------------------------------------------------ components
@@ -614,17 +692,25 @@ def get_component(db: Session, component_id) -> dict:
 def _view(db: Session, a: RbiAssessment, live_inputs: Optional[Dict[str, Any]] = None, live_date: Optional[date] = None) -> dict:
     comp = _component(db, a.component_id)
     eq = _equipment(db, comp.equipment_id)
-    rules = load_rules()
+    model = _model_of(a, comp)
+    rules = rules_of(model)
     locked = a.state != "draft"
+    stored = a.inputs or {}
+    left_out: List[str] = []
+    if not locked and model == "tube" and live_inputs is None:
+        left_out = [str(m["name"]) for m in stored.get("mechanisms") or [] if m.get("name") and not _offered(rules, m["name"])]
+        stored = fit_inputs(db, rules, stored)                       # a draft begun with the shell questions keeps what the tube sheet can take
     if locked and a.results:
         snap = a.results
         analysis = {"result": snap["result"], "effective_inputs": snap["effective_inputs"], "sources": snap["sources"], "facts": snap["facts"]}
     else:
-        analysis = analyse(db, eq, comp, live_inputs if live_inputs is not None else (a.inputs or {}), live_date or a.assessment_date)
-    inputs = live_inputs if live_inputs is not None else (a.inputs or {})
+        analysis = analyse(db, eq, comp, live_inputs if live_inputs is not None else stored, live_date or a.assessment_date)
+    if left_out:                                                     # never dropped silently
+        analysis["result"].setdefault("notes", []).append("Mechanisms removed. Not in the tube bundle list: " + ", ".join(left_out) + ".")
+    inputs = live_inputs if live_inputs is not None else stored
     if not locked:
         inputs = with_component_defaults(comp, inputs)
-    return {"id": str(a.id), "revision": a.revision, "state": a.state, "assessment_date": (live_date or a.assessment_date).isoformat(),
+    return {"id": str(a.id), "model": model, "revision": a.revision, "state": a.state, "assessment_date": (live_date or a.assessment_date).isoformat(),
             "comments": a.comments, "return_reason": a.return_reason, "inputs": inputs, **analysis,
             "equipment": _equipment_head(eq),
             "component": {"id": str(comp.id), "name": comp.name, "component_type": comp.component_type},
@@ -646,12 +732,16 @@ def new_assessment(db: Session, component_id, actor: str) -> dict:
         raise ValueError("This component already has a draft assessment: continue it, or delete it first.")
     if any(a.state == "finalized" for a in rows):
         raise ValueError("This component has an assessment waiting for approval: an admin approves or returns it first.")
+    model = model_of_type(comp.component_type)
+    rules = rules_of(model)
     inputs = dict(rows[-1].inputs) if rows else suggested_inputs(db, eq, comp)
     inputs.pop("assessment_date", None)
+    if model == "tube" and rows:
+        inputs = {**suggested_inputs(db, eq, comp), **fit_inputs(db, rules, inputs)}
     revision = (rows[-1].revision + 1) if rows else 1
     before = (rows[-1].task_plan or {}) if rows else {}
     plan = {key: {"action": "new" if (before.get(key) or {}).get("done") else "none"} for key in ("internal", "external")}     # the same task is updated
-    a = RbiAssessment(component_id=comp.id, revision=revision, state="draft", assessment_date=date.today(), inputs=clean_inputs(db, load_rules(), inputs),
+    a = RbiAssessment(component_id=comp.id, revision=revision, state="draft", assessment_date=date.today(), inputs=clean_inputs(db, rules, inputs),
                       task_plan=plan, created_by=actor, updated_by=actor)
     db.add(a)
     db.flush()
@@ -684,12 +774,13 @@ def _when(body: Dict[str, Any], a: RbiAssessment) -> date:
 def preview(db: Session, assessment_id, body: Dict[str, Any]) -> dict:
     """The result of what is typed so far; nothing is saved."""
     a = _draft(db, assessment_id)
-    return _view(db, a, clean_inputs(db, load_rules(), body.get("inputs") or {}), _when(body, a))
+    rules = rules_of(_model_of(a, _component(db, a.component_id)))
+    return _view(db, a, clean_inputs(db, rules, body.get("inputs") or {}), _when(body, a))
 
 
 def save_assessment(db: Session, assessment_id, body: Dict[str, Any], actor: str) -> dict:
     a = _draft(db, assessment_id)
-    a.inputs = clean_inputs(db, load_rules(), body.get("inputs") or {})
+    a.inputs = clean_inputs(db, rules_of(_model_of(a, _component(db, a.component_id))), body.get("inputs") or {})
     a.assessment_date = _when(body, a)
     if "comments" in body:
         a.comments = (body.get("comments") or "").strip() or None
@@ -716,15 +807,18 @@ def finalize(db: Session, assessment_id, actor: str, approver: Optional[str] = N
     a = _draft(db, assessment_id)
     comp = _component(db, a.component_id)
     eq = _equipment(db, comp.equipment_id)
+    model = model_of_type(comp.component_type)
+    rules = rules_of(model)
+    if model == "tube":
+        a.inputs = fit_inputs(db, rules, a.inputs or {})
     analysis = analyse(db, eq, comp, a.inputs or {}, a.assessment_date)
     check = analysis["result"]["checks"]
     problems = list(check["problems"])
-    rules = load_rules()
     labels = {f["id"]: f["label"] for f in rules["factors"]}
     if check["missing_factors"]:
         problems.append("Still to fill in: " + ", ".join(labels[i] for i in check["missing_factors"]) + ".")
     if not check["weights_total_100"]:
-        problems.append("The weights of the rules do not total 100 in every group: ask for the rules to be checked.")
+        problems.append("Rule weights do not total 100 in every group. Contact your administrator.")
     if any(m["status"] in ("invalid", "missing") for m in analysis["result"]["mechanisms"]):
         problems.append("A damage mechanism is incomplete (see its message).")
     unjustified = [m["name"] for m in analysis["result"]["mechanisms"] if (m.get("flag") or "").startswith(("Override below calculated: justification MISSING", "Justification missing"))]
@@ -798,7 +892,7 @@ def return_assessment(db: Session, assessment_id, reason: Optional[str], actor: 
     if a.state != "finalized":
         raise ValueError(f"Only a finalized assessment can be returned (this one is {a.state}).")
     if blank(reason):
-        raise ValueError("Say why the assessment is returned: the person who finalized it will read it.")
+        raise ValueError("Enter a reason for returning the assessment.")
     _decide_guard(a, actor, "return")
     comp = _component(db, a.component_id)
     eq = _equipment(db, comp.equipment_id)
@@ -880,8 +974,8 @@ def summary(db: Session) -> dict:
 
 
 # ------------------------------------------------------------------------------------------------ for the screens
-def form_description() -> dict:
-    rules = load_rules()
+def form_description(model: str = "shell") -> dict:
+    rules = rules_of(model)
     options = _options(rules)
     inputs = []
     for i in rules["inputs"]:
@@ -889,12 +983,13 @@ def form_description() -> dict:
         if i["key"] in options:
             item["options"] = _unique(options[i["key"]])
         inputs.append(item)
+    rate_row = next(i["row"] for i in rules["inputs"] if i["key"] == "internal_corrosion_rate")
     inputs.insert(next(n for n, i in enumerate(inputs) if i["key"] == "internal_corrosion_rate"), {
-        "key": "internal_corrosion_rate_kind", "kind": "select", "section": "equipment", "row": 15, "label": "Internal corrosion rate: which one",
+        "key": "internal_corrosion_rate_kind", "kind": "select", "section": "equipment", "row": rate_row, "label": "Internal corrosion rate: which one",
         "unit": None, "note": "Controlling, short term and long term come from the inspection data; for Expected you type the rate.",
         "options": options["internal_corrosion_rate_kind"], "source": None})
     factors = [{k: f[k] for k in ("id", "side", "group", "label", "weight", "cui", "kind", "inputs", "scale", "note")} for f in rules["factors"]]
-    return {"version": rules["version"], "source_file": rules["source_file"], "sections": rules["sections"], "inputs": inputs, "factors": factors,
+    return {"model": model, "version": rules["version"], "source_file": rules["source_file"], "sections": rules["sections"], "inputs": inputs, "factors": factors,
             "derived": rules["derived"], "levels": rules["levels"], "matrix": rules["matrix"], "categories": rules["categories"],
             "priority": rules["priority"], "shape": rules["shape"], "settings": rules["settings"], "known_issues": rules["known_issues"],
             "effectiveness_options": [t["option"] for t in next(f for f in rules["factors"] if f["id"] == "P2.9")["table"]],
@@ -914,7 +1009,8 @@ def list_fluids(db: Session, q: Optional[str], kind: str, limit: int) -> List[di
     return out
 
 
-def list_mechanisms(db: Session, location: Optional[str], q: Optional[str]) -> List[dict]:
+def list_mechanisms(db: Session, location: Optional[str], q: Optional[str], model: str = "shell") -> List[dict]:
+    rules = rules_of(model)
     query = db.query(RbiMechanismEntry)
     if location:
         query = query.filter(RbiMechanismEntry.location == location)
@@ -924,4 +1020,4 @@ def list_mechanisms(db: Session, location: Optional[str], q: Optional[str]) -> L
              "typical_drivers": r.typical_drivers, "primary_nde": r.primary_nde, "secondary_nde": r.secondary_nde,
              "mitigation": r.mitigation, "definition": r.definition, "applicable_materials": r.applicable_materials,
              "min_temperature_c": _f(r.min_temperature_c), "max_temperature_c": _f(r.max_temperature_c),
-             "process_streams": r.process_streams} for r in query.order_by(RbiMechanismEntry.sort_order).all()]
+             "process_streams": r.process_streams} for r in query.order_by(RbiMechanismEntry.sort_order).all() if _offered(rules, r.name)]

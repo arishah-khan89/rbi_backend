@@ -121,7 +121,7 @@ def reflect(db: Session, a: RbiAssessment, comp: RbiComponent, eq, actor: str) -
     risk = result.get("risk") or {}
     planning = result.get("planning") or {}
     details = (f"From the risk assessment of {comp.name} (revision {a.revision}): {risk.get('level', '-')} risk, "
-               f"inspection priority {risk.get('priority', '-')}. {planning.get('required_action') or ''}").strip()
+               f"inspection priority {risk.get('priority') or '-'}. {planning.get('required_action') or ''}").strip()
     done: List[str] = []
     for task_type, key in PLAN:
         entry = plan.get(key) or {"action": "none"}
